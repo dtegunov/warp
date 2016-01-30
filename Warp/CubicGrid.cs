@@ -65,7 +65,7 @@ namespace Warp
         public CubicGrid(float[,,] values)
         {
             Values = values;
-            Dimensions = new int3(values.GetLength(0), values.GetLength(1), values.GetLength(2));
+            Dimensions = new int3(values.GetLength(2), values.GetLength(1), values.GetLength(0));
             Spacing = new float3(1f / Math.Max(1, Dimensions.X - 1), 1f / Math.Max(1, Dimensions.Y - 1), 1f / Math.Max(1, Dimensions.Z - 1));
         }
 
@@ -211,6 +211,42 @@ namespace Warp
             return new CubicGrid(newSize, Result);
         }
 
+        public CubicGrid CollapseXY()
+        {
+            float[] Collapsed = new float[Dimensions.Z];
+            for (int z = 0; z < Collapsed.Length; z++)
+            {
+                float Mean = 0;
+                for (int y = 0; y < Dimensions.Y; y++)
+                    for (int x = 0; x < Dimensions.X; x++)
+                        Mean += Values[z, y, x];
+
+                Mean /= Dimensions.ElementsSlice();
+                Collapsed[z] = Mean;
+            }
+
+            return new CubicGrid(new int3(1, 1, Dimensions.Z), Collapsed);
+        }
+
+        public CubicGrid CollapseZ()
+        {
+            float[] Collapsed = new float[Dimensions.ElementsSlice()];
+            for (int y = 0; y < Dimensions.Y; y++)
+            {
+                for (int x = 0; x < Dimensions.X; x++)
+                {
+                    float Mean = 0;
+                    for (int z = 0; z < Dimensions.Z; z++)
+                        Mean += Values[z, y, x];
+
+                    Mean /= Dimensions.Z;
+                    Collapsed[y * Dimensions.X + x] = Mean;
+                }
+            }
+
+            return new CubicGrid(Dimensions.Slice(), Collapsed);
+        }
+
         public float[][] GetWiggleWeights(int3 valueGrid, float3 overlapFraction)
         {
             float[][] Result = new float[Dimensions.Elements()][];
@@ -286,7 +322,7 @@ namespace Warp
 
             foreach (XPathNavigator nodeNav in nav.SelectChildren("Node", ""))
             {
-                try
+                //try
                 {
                     int X = int.Parse(nodeNav.GetAttribute("X", ""), CultureInfo.InvariantCulture);
                     int Y = int.Parse(nodeNav.GetAttribute("Y", ""), CultureInfo.InvariantCulture);
@@ -295,7 +331,7 @@ namespace Warp
 
                     Values[Z, Y, X] = Value;
                 }
-                catch { }
+                //catch { }
             }
 
             return new CubicGrid(Values);

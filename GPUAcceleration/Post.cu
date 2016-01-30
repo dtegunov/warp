@@ -51,3 +51,13 @@ __declspec(dllexport) void WeightedFrameSum(float* d_frames,
 	cudaFree(d_framesft);
 	cudaFree(d_framesft);
 }
+
+__declspec(dllexport) void DoseWeighting(float* d_freq, 
+										float* d_output, 
+										uint length, 
+										float* h_dose, 
+										float3 nikoconst, 
+										uint batch)
+{
+    d_DoseFilter(d_freq, d_output, length, h_dose, nikoconst, batch);
+}

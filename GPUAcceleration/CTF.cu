@@ -22,36 +22,23 @@ __declspec(dllexport) void CreateSpectra(float* d_frame,
 										int norigins, 
 										int2 dimsregion, 
 										int3 ctfgrid, 
-										int binmin, 
-										int binmax, 
-										float* d_outputall, 
-										float* d_outputalltrimmed, 
-										float* d_outputmean, 
-										float* d_outputmeanpolar, 
-										float* d_output1d)
+										float* d_outputall,
+										float* d_outputmean)
 {
-	int nbins = binmax - binmin;
-	int2 dimstrimmed = GetCart2PolarFFTSize(dimsregion);
-	dimstrimmed.x = nbins;
-	int2 dimsunpadded = toInt2(dimsregion.x / 1, dimsregion.y / 1);
-
 	int3* d_origins = (int3*)CudaMallocFromHostArray(h_origins, norigins * sizeof(int3));
 	tfloat* d_tempspectra;
 	cudaMalloc((void**)&d_tempspectra, tmax(norigins, nframes) * ElementsFFT2(dimsregion) * sizeof(tfloat));
-	tfloat* d_temppolar;
-	cudaMalloc((void**)&d_temppolar, Elements2(GetCart2PolarFFTSize(dimsregion)) * tmax(norigins, nframes) * sizeof(tfloat));
 	tfloat* d_tempaverages;
 	cudaMalloc((void**)&d_tempaverages, nframes * ElementsFFT2(dimsregion) * sizeof(tfloat));
 
 	bool ctfspace = ctfgrid.x * ctfgrid.y > 1;
 	bool ctftime = ctfgrid.z > 1;
-	int nspectra = (ctfspace || ctftime) ? (ctfspace ? norigins : 1) * (ctftime ? nframes : 1) : 0;
+	int nspectra = (ctfspace || ctftime) ? (ctfspace ? norigins : 1) * (ctftime ? nframes : 1) : 1;
 
 	// Temp spectra will be summed up to be averaged later in case of only spatial resolution
 	if (ctfspace && !ctftime)
 	{
 		d_ValueFill(d_outputall, ElementsFFT2(dimsregion) * norigins, 0.0f);
-		d_ValueFill(d_outputalltrimmed, Elements2(dimstrimmed) * norigins, 0.0f);
 	}
 
 	for (int z = 0; z < nframes; z++)
@@ -59,28 +46,28 @@ __declspec(dllexport) void CreateSpectra(float* d_frame,
 		// Full precision, just write everything to output which is big enough
 		if (ctfspace && ctftime)
 		{
-			d_CTFPeriodogram(d_frame + Elements2(dimsframe) * z, dimsframe, d_origins, norigins, dimsunpadded, dimsregion, d_outputall + ElementsFFT2(dimsregion) * norigins * z, false);
-			d_Cart2PolarFFT(d_outputall + ElementsFFT2(dimsregion) * norigins * z, d_outputalltrimmed + Elements2(dimstrimmed) * norigins * z, dimsregion, T_INTERP_LINEAR, binmin, binmax, norigins);
+			d_CTFPeriodogram(d_frame + Elements2(dimsframe) * z, dimsframe, d_origins, norigins, dimsregion, dimsregion, d_outputall + ElementsFFT2(dimsregion) * norigins * z, false);			
+			d_AddScalar(d_outputall + ElementsFFT2(dimsregion) * norigins * z, d_outputall + ElementsFFT2(dimsregion) * norigins * z, ElementsFFT2(dimsregion) * norigins, 1e2f);
+			d_Log(d_outputall + ElementsFFT2(dimsregion) * norigins * z, d_outputall + ElementsFFT2(dimsregion) * norigins * z, ElementsFFT2(dimsregion) * norigins);
 		}
 		else // Partial or no precision
 		{
 			// Write spectra to temp and reduce them to a temporary average spectrum
-			d_CTFPeriodogram(d_frame + Elements2(dimsframe) * z, dimsframe, d_origins, norigins, dimsunpadded, dimsregion, d_tempspectra, false);
+			d_CTFPeriodogram(d_frame + Elements2(dimsframe) * z, dimsframe, d_origins, norigins, dimsregion, dimsregion, d_tempspectra, false);
+			d_AddScalar(d_tempspectra, d_tempspectra, ElementsFFT2(dimsregion) * norigins, 1e2f);
+			d_Log(d_tempspectra, d_tempspectra, ElementsFFT2(dimsregion) * norigins);
+
 			d_ReduceMean(d_tempspectra, d_tempaverages + ElementsFFT2(dimsregion) * z, ElementsFFT2(dimsregion), norigins);
 
 			// Spatially resolved, add to output which has norigins spectra
 			if (ctfspace)
 			{
 				d_AddVector(d_outputall, d_tempspectra, d_outputall, ElementsFFT2(dimsregion) * norigins);
-
-				d_Cart2PolarFFT(d_tempspectra, d_temppolar, dimsregion, T_INTERP_LINEAR, binmin, binmax, norigins);
-				d_AddVector(d_outputalltrimmed, d_temppolar, d_outputalltrimmed, Elements2(dimstrimmed) * norigins);
 			}
 			// Temporally resolved, each spectrum will be the average of the entire frame's spectra (= temporary average, so just copy)
 			else if (ctftime)
 			{
 				cudaMemcpy(d_outputall + ElementsFFT2(dimsregion) * z, d_tempaverages + ElementsFFT2(dimsregion) * z, ElementsFFT2(dimsregion) * sizeof(float), cudaMemcpyDeviceToDevice);
-				d_Cart2PolarFFT(d_tempaverages + ElementsFFT2(dimsregion) * z, d_outputalltrimmed + Elements2(dimstrimmed) * z, dimsregion, T_INTERP_LINEAR, binmin, binmax, 1);
 			}
 		}
 	}
@@ -95,44 +82,17 @@ __declspec(dllexport) void CreateSpectra(float* d_frame,
 
 		// Those were summed up, so divide by number of summands
 		if (ctfspace)
-		{
 			d_DivideByScalar(d_outputall, d_outputall, ElementsFFT2(dimsregion) * norigins, (tfloat)nframes);
-			d_DivideByScalar(d_outputalltrimmed, d_outputalltrimmed, Elements2(dimstrimmed) * norigins, (tfloat)nframes);
-		}
 	}
-
 	//d_WriteMRC(d_outputmean, toInt3FFT(dimsregion), "d_outputmean.mrc");
-
-	// Do post-processing for average output
-	d_AddScalar(d_outputmean, d_outputmean, ElementsFFT2(dimsregion), 1e2f);
-	d_Log(d_outputmean, d_outputmean, ElementsFFT2(dimsregion));
-	//d_MultiplyByVector(d_outputmean, d_outputmean, d_outputmean, ElementsFFT2(dimsregion));
-	//d_WriteMRC(d_outputmean, toInt3FFT(dimsregion), "d_outputmean2.mrc");
-
-	// Do post-processing for individual spectra
-	if (nspectra > 0)
-	{
-		d_AddScalar(d_outputall, d_outputall, nspectra * ElementsFFT2(dimsregion), 1e2f);
-		d_Log(d_outputall, d_outputall, nspectra * ElementsFFT2(dimsregion));
-		//d_MultiplyByVector(d_outputall, d_outputall, d_outputall, ElementsFFT2(dimsregion) * nspectra);
-
-		d_AddScalar(d_outputalltrimmed, d_outputalltrimmed, nspectra * Elements2(dimstrimmed), 1e2f);
-		d_Log(d_outputalltrimmed, d_outputalltrimmed, nspectra * Elements2(dimstrimmed));
-		//d_MultiplyByVector(d_outputalltrimmed, d_outputalltrimmed, d_outputalltrimmed, Elements2(dimstrimmed) * nspectra);
-	}
+	
+	// 0D case, only one average spectrum in outputall
+	if (nspectra == 1)
+		cudaMemcpy(d_outputall, d_outputmean, ElementsFFT2(dimsregion) * sizeof(float), cudaMemcpyDeviceToDevice);
 
 	cudaFree(d_origins);
 	cudaFree(d_tempspectra);
 	cudaFree(d_tempaverages);
-	cudaFree(d_temppolar);
-
-
-	// Make 1D rotational average from mean spectrum, don't take anisotropy into account yet.
-
-	int2 dimspolar = GetCart2PolarFFTSize(dimsregion);
-
-	d_Cart2PolarFFT(d_outputmean, d_outputmeanpolar, dimsregion, T_INTERP_LINEAR);
-	d_ReduceMean(d_outputmeanpolar, d_output1d, dimspolar.x, dimspolar.y);
 }
 
 __declspec(dllexport) CTFParams CTFFitMean(float* d_ps, float2* d_pscoords, int2 dims, CTFParams startparams, CTFFitParams fp, bool doastigmatism)
@@ -142,11 +102,13 @@ __declspec(dllexport) CTFParams CTFFitMean(float* d_ps, float2* d_pscoords, int2
 	tfloat scoremean;
 	tfloat scorestd;
 
-	d_CTFFit(d_ps, d_pscoords, doastigmatism ? dims : toInt2(Elements2(dims), 1), &startparams, 1, fp, 1, fits, score, scoremean, scorestd);
+	d_CTFFit(d_ps, d_pscoords, dims, &startparams, 1, fp, 2, fits, score, scoremean, scorestd);
 
 	CTFParams result;
 	for (int i = 0; i < 12; i++)
 		((tfloat*)&result)[i] = ((tfloat*)&startparams)[i] + ((tfloat*)&(fits[0].second))[i];
+
+	result.Bfactor = score;
 
 	return result;
 }
@@ -159,14 +121,14 @@ __declspec(dllexport) void CTFMakeAverage(float* d_ps, float2* d_pscoords, uint 
 		float* d_averages;
 		cudaMalloc((void**)&d_averages, nbins * batch * sizeof(float));
 
-		d_CTFRotationalAverageToTarget(d_ps, d_pscoords, length, sidelength, h_sourceparams, targetparams, d_output, minbin, maxbin, h_consider, batch);
+		d_CTFRotationalAverageToTargetDeterministic(d_ps, d_pscoords, length, sidelength, h_sourceparams, targetparams, d_output, minbin, maxbin, h_consider, batch);
 		//d_ReduceMean(d_averages, d_output, nbins, batch);
 
 		cudaFree(d_averages);
 	}
 	else
 	{
-		d_CTFRotationalAverageToTarget(d_ps, d_pscoords, length, sidelength, h_sourceparams, targetparams, d_output, minbin, maxbin, NULL, 1);
+		d_CTFRotationalAverageToTargetDeterministic(d_ps, d_pscoords, length, sidelength, h_sourceparams, targetparams, d_output, minbin, maxbin, NULL, 1);
 	}
 }
 
@@ -262,14 +224,4 @@ __global__ void ScaleNormCorrSumKernel(half2* d_simcoords, half* d_sim, half* d_
 
 		d_scores[blockIdx.x] = sum1 / (float)length;
 	}
-}
-
-__declspec(dllexport) void CTFSubtractBackground(float* d_ps, float* d_background, uint length, float* d_output, uint batch)
-{
-	d_SubtractVector(d_ps, d_background, d_output, length, batch);
-}
-
-__declspec(dllexport) void CTFNormalize(float* d_ps, float* d_output, uint length, uint batch)
-{
-	d_NormMonolithic(d_ps, d_output, length, T_NORM_MEAN01STD, batch);
 }

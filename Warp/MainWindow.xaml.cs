@@ -14,6 +14,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Warp.Headers;
+using Warp.Stages;
 using Warp.Tools;
 
 namespace Warp
@@ -367,8 +369,22 @@ namespace Warp
 
         private void ButtonExportStatistics_OnClick(object sender, RoutedEventArgs e)
         {
-            Options.DisplayedMovie?.ProcessCTF(true);
-            //Options.DisplayedMovie?.ProcessShift();
+            MapHeader OriginalHeader = MapHeader.ReadFromFile(Options.DisplayedMovie?.Path,
+                                                              new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                              MainWindow.Options.InputDatOffset,
+                                                              ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+            Image OriginalStack = StageDataLoad.LoadMap(Options.DisplayedMovie?.Path,
+                                                        new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                        MainWindow.Options.InputDatOffset,
+                                                        ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+
+            OriginalStack.Xray(20f);
+
+            Options.DisplayedMovie?.ProcessShift(OriginalHeader, OriginalStack);
+            Options.DisplayedMovie?.ProcessCTF(OriginalHeader, OriginalStack, true);
+            Options.DisplayedMovie?.CreateCorrected(OriginalHeader, OriginalStack, "");
+
+            OriginalStack.Dispose();
         }
 
         #endregion

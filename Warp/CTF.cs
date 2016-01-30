@@ -162,7 +162,7 @@ namespace Warp
             _DefocusDelta = (decimal) s.DefocusDelta * 1e6M;
             _DefocusAngle = (decimal) s.AstigmatismAngle * (180M / (decimal)Math.PI);
 
-            _Bfactor = (decimal) s.Bfactor * 1e20M;
+            //_Bfactor = (decimal) s.Bfactor * 1e20M;
             _Scale = (decimal) s.Scale;
 
             _PhaseShift = (decimal) s.PhaseShift / (decimal) Math.PI;
@@ -231,16 +231,15 @@ namespace Warp
                 retval *= Math.Exp(K4 * r2);
 
             if (ampsquared)
-                retval = Math.Abs(retval);// * retval);
+                retval = Math.Abs(retval * retval);
 
             return (float)(scale * retval);
         }
 
-        public float[] Get2D(float2[] coordinates, int radius, bool ampsquared, bool ignorebfactor = false, bool ignorescale = false)
+        public float[] Get2D(float2[] coordinates, bool ampsquared, bool ignorebfactor = false, bool ignorescale = false)
         {
             float[] Output = new float[coordinates.Length];
-
-            float ny = 0.5f / radius;
+            
             float pixelsize = (float) PixelSize;
             float pixeldelta = (float) PixelSizeDelta;
             float pixelangle = (float) PixelSizeAngle / (float)(180.0 / Math.PI);
@@ -261,7 +260,7 @@ namespace Warp
             Parallel.For(0, coordinates.Length, i =>
             {
                 float angle = coordinates[i].Y;
-                float r = coordinates[i].X * ny / (pixelsize + pixeldelta * (float) Math.Cos(2.0 * (angle - pixelangle)));
+                float r = coordinates[i].X / (pixelsize + pixeldelta * (float) Math.Cos(2.0 * (angle - pixelangle)));
                 float r2 = r * r;
                 float r4 = r2 * r2;
 

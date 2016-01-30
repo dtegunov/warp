@@ -44,12 +44,13 @@ __declspec(dllexport) void __stdcall CopyDeviceToHost(float* d_source, float* h_
 
 __declspec(dllexport) void __stdcall CopyDeviceHalfToHost(half* d_source, float* h_dest, long elements)
 {
-	float* h_pinned;
-	cudaMallocHost((void**)&h_pinned, elements * sizeof(float));
+	float* d_source32;
+	cudaMallocHost((void**)&d_source32, elements * sizeof(float));
 
-	gtom::d_ConvertToTFloat(d_source, h_pinned, elements);
-	memcpy(h_dest, h_pinned, elements * sizeof(float));
-	cudaFreeHost(h_pinned);
+	gtom::d_ConvertToTFloat(d_source, d_source32, elements);
+	cudaMemcpy(h_dest, d_source32, elements * sizeof(float), cudaMemcpyDeviceToHost);
+
+	cudaFree(d_source32);
 }
 
 __declspec(dllexport) void __stdcall CopyDeviceToDevice(float* d_source, float* d_dest, long elements)
@@ -69,12 +70,11 @@ __declspec(dllexport) void __stdcall CopyHostToDevice(float* h_source, float* d_
 
 __declspec(dllexport) void __stdcall CopyHostToDeviceHalf(float* h_source, half* d_dest, long elements)
 {
-	float* h_pinned;
-	cudaMallocHost((void**)&h_pinned, elements * sizeof(float));
-	memcpy(h_pinned, h_source, elements * sizeof(float));
+	float* d_source = (float*)gtom::CudaMallocFromHostArray(h_source, elements * sizeof(float));
 
-	gtom::d_ConvertTFloatTo(h_pinned, d_dest, elements);
-	cudaFreeHost(h_pinned);
+	gtom::d_ConvertTFloatTo(d_source, d_dest, elements);
+
+	cudaFree(d_source);
 }
 
 __declspec(dllexport) void __stdcall SingleToHalf(float* d_source, half* d_dest, long elements)

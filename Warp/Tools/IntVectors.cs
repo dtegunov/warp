@@ -58,6 +58,11 @@ namespace Warp.Tools
             return ((long)position.Z * (long)Y + (long)position.Y) * (long)X + (long)position.X;
         }
 
+        public int3 Slice()
+        {
+            return new int3(X, Y, 1);
+        }
+
         public static implicit operator byte[] (int3 value)
         {
             byte[] Bytes = new byte[3 * sizeof(int)];
@@ -66,6 +71,16 @@ namespace Warp.Tools
             Array.Copy(BitConverter.GetBytes(value.Z), 0, Bytes, 2 * sizeof(int), sizeof(int));
 
             return Bytes;
+        }
+
+        public static bool operator <(int3 v1, int3 v2)
+        {
+            return v1.X < v2.X && v1.Y < v2.Y && v1.Z < v2.Z;
+        }
+
+        public static bool operator >(int3 v1, int3 v2)
+        {
+            return v1.X > v2.X && v1.Y > v2.Y && v1.Z > v2.Z;
         }
 
         public override bool Equals(Object obj)
@@ -134,6 +149,16 @@ namespace Warp.Tools
             Array.Copy(BitConverter.GetBytes(value.Y), 0, Bytes, sizeof(int), sizeof(int));
 
             return Bytes;
+        }
+
+        public static bool operator <(int2 v1, int2 v2)
+        {
+            return v1.X < v2.X && v1.Y < v2.Y;
+        }
+
+        public static bool operator >(int2 v1, int2 v2)
+        {
+            return v1.X > v2.X && v1.Y > v2.Y;
         }
 
         public override bool Equals(Object obj)

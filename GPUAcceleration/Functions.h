@@ -16,19 +16,15 @@ using namespace std;
 #include <set>
 
 // CTF.cpp:
-extern "C" __declspec(dllexport) void CreateSpectra(float* d_frame, 
-													int2 dimsframe, 
-													int nframes, 
-													int3* h_origins, 
-													int norigins, 
-													int2 dimsregion, 
+extern "C" __declspec(dllexport) void CreateSpectra(float* d_frame,
+													int2 dimsframe,
+													int nframes,
+													int3* h_origins,
+													int norigins,
+													int2 dimsregion,
 													int3 ctfgrid,
-													int binmin, int binmax,
-													float* d_outputall, 
-													float* d_outputalltrimmed,
-													float* d_outputmean, 
-													float* d_outputmeanpolar, 
-													float* d_output1d);
+													float* d_outputall,
+													float* d_outputmean);
 
 extern "C" __declspec(dllexport) gtom::CTFParams CTFFitMean(float* d_ps, 
 											  			    float2* d_pscoords, 
@@ -56,17 +52,6 @@ extern "C" __declspec(dllexport) void CTFCompareToSim(half* d_ps,
 													  gtom::CTFParams* h_sourceparams, 
 													  float* h_scores,
 													  uint batch);
-
-extern "C" __declspec(dllexport) void CTFSubtractBackground(float* d_ps, 
-															float* d_background, 
-															uint length, 
-															float* d_output, 
-															uint batch);
-
-extern "C" __declspec(dllexport) void CTFNormalize(float* d_ps, 
-												   float* d_output, 
-												   uint length, 
-												   uint batch);
 
 // Cubic.cpp:
 
@@ -112,6 +97,13 @@ extern "C" __declspec(dllexport) void GetMotionFilter(float* d_output,
 														uint nshifts, 
 														uint batch);
 
+extern "C" __declspec(dllexport) void DoseWeighting(float* d_freq,
+                                                    float* d_output,
+                                                    uint length,
+                                                    float* h_dose,
+                                                    float3 nikoconst,
+                                                    uint batch);
+
 // Shift.cpp:
 
 extern "C" __declspec(dllexport) void CreateShift(float* d_frame,
@@ -136,7 +128,6 @@ extern "C" __declspec(dllexport) void ShiftGetAverage(half2* d_phase,
 extern "C" __declspec(dllexport) void ShiftGetDiff(half2* d_phase,
 													half2* d_average,
 													half2* d_shiftfactors,
-													half* d_weights,
 													uint length,
 													uint probelength,
 													float2* d_shifts,
@@ -147,13 +138,18 @@ extern "C" __declspec(dllexport) void ShiftGetDiff(half2* d_phase,
 extern "C" __declspec(dllexport) void ShiftGetGrad(half2* d_phase,
 													half2* d_average,
 													half2* d_shiftfactors,
-													half* d_weights,
 													uint length,
 													uint probelength,
 													float2* d_shifts,
 													float2* h_grad,
 													uint npositions,
 													uint nframes);
+
+extern "C" __declspec(dllexport) void CreateMotionBlur(float* d_output, 
+                                                       int3 dims, 
+                                                       float* h_shifts, 
+                                                       uint nshifts, 
+                                                       uint batch);
 
 // Tools.cu:
 
@@ -179,6 +175,11 @@ extern "C" __declspec(dllexport) void ReduceMean(float* d_input,
 
 extern "C" __declspec(dllexport) void ReduceMeanHalf(half* d_input, half* d_output, uint vectorlength, uint nvectors, uint batch);
 
+extern "C" __declspec(dllexport) void Normalize(float* d_ps,
+												float* d_output,
+												uint length,
+												uint batch);
+
 extern "C" __declspec(dllexport) void CreateCTF(float* d_output,
 												float2* d_coords,
 												uint length,
@@ -198,34 +199,50 @@ extern "C" __declspec(dllexport) void ShiftStack(float* d_input,
 												float3* h_shifts,
 												uint batch);
 
+extern "C" __declspec(dllexport) void FFT(float* d_input, float2* d_output, int3 dims, uint batch);
 
+extern "C" __declspec(dllexport) void IFFT(float2* d_input, float* d_output, int3 dims, uint batch);
 
-extern "C" __declspec(dllexport) void Add(float* d_input, float* d_summands, float* d_output, size_t elements);
+extern "C" __declspec(dllexport) void Pad(float* d_input, float* d_output, int3 olddims, int3 newdims, uint batch);
+
+extern "C" __declspec(dllexport) void PadFT(float2* d_input, float2* d_output, int3 olddims, int3 newdims, uint batch);
+
+extern "C" __declspec(dllexport) void CropFT(float2* d_input, float2* d_output, int3 olddims, int3 newdims, uint batch);
+
+extern "C" __declspec(dllexport) void RemapToFTComplex(float2* d_input, float2* d_output, int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) void RemapToFTFloat(float* d_input, float* d_output, int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) void RemapFromFTComplex(float2* d_input, float2* d_output, int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) void RemapFromFTFloat(float* d_input, float* d_output, int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) void Cart2Polar(float* d_input, float* d_output, int2 dims, uint innerradius, uint exclusiveouterradius, uint batch);
+
+extern "C" __declspec(dllexport) void Cart2PolarFFT(float* d_input, float* d_output, int2 dims, uint innerradius, uint exclusiveouterradius, uint batch);
+
+extern "C" __declspec(dllexport) void Xray(float* d_input, float* d_output, float ndevs, int2 dims, uint batch);
+
+extern "C" __declspec(dllexport) void Amplitudes(float2* d_input, float* d_output, size_t length);
+
+extern "C" __declspec(dllexport) void Sign(float* d_input, float* d_output, size_t length);
 
 extern "C" __declspec(dllexport) void AddToSlices(float* d_input, float* d_summands, float* d_output, size_t sliceelements, uint slices);
 
-extern "C" __declspec(dllexport) void Subtract(float* d_input, float* d_subtrahends, float* d_output, size_t elements);
-
 extern "C" __declspec(dllexport) void SubtractFromSlices(float* d_input, float* d_subtrahends, float* d_output, size_t sliceelements, uint slices);
-
-extern "C" __declspec(dllexport) void Multiply(float* d_input, float* d_multiplicators, float* d_output, size_t elements);
 
 extern "C" __declspec(dllexport) void MultiplySlices(float* d_input, float* d_multiplicators, float* d_output, size_t sliceelements, uint slices);
 
-extern "C" __declspec(dllexport) void Divide(float* d_input, float* d_divisors, float* d_output, size_t elements);
-
 extern "C" __declspec(dllexport) void DivideSlices(float* d_input, float* d_divisors, float* d_output, size_t sliceelements, uint slices);
-
-extern "C" __declspec(dllexport) void AddHalf(half* d_input, half* d_summands, half* d_output, size_t elements);
 
 extern "C" __declspec(dllexport) void AddToSlicesHalf(half* d_input, half* d_summands, half* d_output, size_t sliceelements, uint slices);
 
-extern "C" __declspec(dllexport) void SubtractHalf(half* d_input, half* d_subtrahends, half* d_output, size_t elements);
-
 extern "C" __declspec(dllexport) void SubtractFromSlicesHalf(half* d_input, half* d_subtrahends, half* d_output, size_t sliceelements, uint slices);
 
-extern "C" __declspec(dllexport) void MultiplyHalf(half* d_input, half* d_multiplicators, half* d_output, size_t elements);
-
 extern "C" __declspec(dllexport) void MultiplySlicesHalf(half* d_input, half* d_multiplicators, half* d_output, size_t sliceelements, uint slices);
+
+extern "C" __declspec(dllexport) void MultiplyComplexSlicesByScalar(float2* d_input, float* d_multiplicators, float2* d_output, size_t sliceelements, uint slices);
+
+extern "C" __declspec(dllexport) void DivideComplexSlicesByScalar(float2* d_input, float* d_divisors, float2* d_output, size_t sliceelements, uint slices);
 
 #endif

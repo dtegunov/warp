@@ -216,5 +216,79 @@ namespace Warp.Tools
             for (int i = 0; i < array.Length; i++)
                 array[i] = OldOrder[indices[i]];
         }
+
+        public static void ForEachElement(int2 dims, Action<int, int> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+                for (int x = 0; x < dims.X; x++)
+                    action(x, y);
+        }
+
+        public static void ForEachElement(int2 dims, Action<int, int, int, int> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+            {
+                int yy = y - dims.Y / 2;
+
+                for (int x = 0; x < dims.X; x++)
+                {
+                    int xx = x - dims.X / 2;
+
+                    action(x, y, xx, yy);
+                }
+            }
+        }
+
+        public static void ForEachElement(int2 dims, Action<int, int, int, int, float, float> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+            {
+                int yy = y - dims.Y / 2;
+
+                for (int x = 0; x < dims.X; x++)
+                {
+                    int xx = x - dims.X / 2;
+
+                    action(x, y, xx, yy, (float)Math.Sqrt(xx * xx + yy * yy), (float)Math.Atan2(yy, xx));
+                }
+            }
+        }
+
+        public static void ForEachElementFT(int2 dims, Action<int, int> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+                for (int x = 0; x < dims.X / 2 + 1; x++)
+                    action(x, y);
+        }
+
+        public static void ForEachElementFT(int2 dims, Action<int, int, int, int> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+            {
+                int yy = y - dims.Y / 2;
+
+                for (int x = 0; x < dims.X / 2 + 1; x++)
+                {
+                    int xx = x - dims.X / 2;
+
+                    action(x, y, xx, yy);
+                }
+            }
+        }
+
+        public static void ForEachElementFT(int2 dims, Action<int, int, int, int, float, float> action)
+        {
+            for (int y = 0; y < dims.Y; y++)
+            {
+                int yy = y - dims.Y / 2;
+
+                for (int x = 0; x < dims.X / 2 + 1; x++)
+                {
+                    int xx = x - dims.X / 2;
+
+                    action(x, y, xx, yy, (float)Math.Sqrt(xx * xx + yy * yy), (float)Math.Atan2(yy, xx));
+                }
+            }
+        }
     }
 }

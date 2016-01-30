@@ -145,6 +145,7 @@ namespace Warp.Tools
         public static float ReduceWeighted(float[] data, float[] weights)
         {
             float Sum = 0f;
+            float Weightsum = 0f;
             unsafe
             {
                 fixed (float* dataPtr = data)
@@ -154,11 +155,17 @@ namespace Warp.Tools
                     float* weightsP = weightsPtr;
 
                     for (int i = 0; i < data.Length; i++)
-                        Sum += *dataP++ * *weightsP++;
+                    {
+                        Sum += *dataP++ * *weightsP;
+                        Weightsum += *weightsP++;
+                    }
                 }
             }
 
-            return Sum;
+            if (Math.Abs(Weightsum) > 1e-6f)
+                return Sum / Weightsum;
+            else
+                return Sum;
         }
     }
 }

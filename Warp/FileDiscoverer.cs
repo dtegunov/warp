@@ -77,9 +77,7 @@ namespace Warp
                 {
                     if (ShouldAbort)
                         return;
-
-                    if (fileName.Substring(fileName.Length - FileExtension.Length - 2, 3) == ".ps") // Power spectrum helper image
-                        continue;
+                    
                     if (GetMovie(fileName) != null)
                         continue;
 

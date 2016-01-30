@@ -236,37 +236,6 @@ namespace Warp
             if (float.IsNaN(ScaleY))
                 ScaleY = 1f;
 
-            /*if (zeros.Length >= 3 && peaks.Length >= 3)
-            {
-                peaks = peaks.Where(v => v >= MinX && v <= MaxX).ToArray();
-                zeros = zeros.Where(v => v >= MinX && v <= MaxX).ToArray();
-
-                Func<float, int> ToDiscrete = x => (int)((x - MinX) / (MaxX - MinX) * (data.Length - 1));
-                float2[] FitBackground = new float2[zeros.Length];
-                float2[] FitScale = new float2[peaks.Length];
-
-                FitBackground[0] = new float2(zeros[0], data[ToDiscrete(zeros[0])].Y);
-                FitBackground[FitBackground.Length - 1] = new float2(zeros[zeros.Length - 1], data[ToDiscrete(zeros[zeros.Length - 1])].Y);
-                for (int x = 1; x < zeros.Length - 1; x++)
-                    FitBackground[x] = new float2(zeros[x], (data[ToDiscrete(zeros[x - 1])].Y + 
-                                                             data[ToDiscrete(zeros[x])].Y + 
-                                                             data[ToDiscrete(zeros[x + 1])].Y) / 3f);
-                background = new Cubic1D(FitBackground);
-                float[] Subtracted = MathHelper.Minus(data.Select(v => v.Y).ToArray(), 
-                                                             background.Interp(data.Select(v => v.X).ToArray()));
-
-                FitScale[0] = new float2(peaks[0], Subtracted[ToDiscrete(peaks[0])]);
-                FitScale[FitScale.Length - 1] = new float2(peaks[peaks.Length - 1], Subtracted[ToDiscrete(peaks[peaks.Length - 1])]);
-                for (int x = 1; x < peaks.Length - 1; x++)
-                    FitScale[x] = new float2(peaks[x], (Subtracted[ToDiscrete(peaks[x - 1])] + 
-                                                        Subtracted[ToDiscrete(peaks[x])] + 
-                                                        Subtracted[ToDiscrete(peaks[x + 1])]) / 3f);
-
-                scale = new Cubic1D(FitScale);
-
-                return;
-            }*/
-
             peaks = peaks.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 2 == 0).ToArray();
             zeros = zeros.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 2 == 0).ToArray();
 
@@ -317,7 +286,7 @@ namespace Warp
                     Sum += Diff * Diff;
                 }
 
-                return Math.Sqrt(Sum / data.Length) * 1000;
+                return Math.Sqrt(Sum / data.Length) * 100000;
             };
 
             Func<double[], double[]> Gradient = input =>

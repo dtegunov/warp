@@ -32,6 +32,9 @@ namespace Warp
         public long ElementsSliceComplex => IsFT ? DimsFTSlice.Elements() : DimsSlice.Elements();
         public long ElementsSliceReal => IsComplex ? ElementsSliceComplex * 2 : ElementsSliceComplex;
 
+        public long ElementsLineComplex => IsFT ? DimsFTSlice.X : DimsSlice.X;
+        public long ElementsLineReal => IsComplex ? ElementsLineComplex * 2 : ElementsLineComplex;
+
         private bool IsDeviceDirty = false;
         private IntPtr _DeviceData = IntPtr.Zero;
 
@@ -255,13 +258,14 @@ namespace Warp
         {
             lock (Sync)
             {
-                if (_DeviceData != IntPtr.Zero && IsDeviceDirty)
+                if (_DeviceData != IntPtr.Zero)
                 {
-                    for (int z = 0; z < Dims.Z; z++)
-                        if (!IsHalf)
-                            GPU.CopyDeviceToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(float)), HostData[z], ElementsSliceReal);
-                        else
-                            GPU.CopyDeviceHalfToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(short)), HostData[z], ElementsSliceReal);
+                    if (IsDeviceDirty)
+                        for (int z = 0; z < Dims.Z; z++)
+                            if (!IsHalf)
+                                GPU.CopyDeviceToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(float)), HostData[z], ElementsSliceReal);
+                            else
+                                GPU.CopyDeviceHalfToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(short)), HostData[z], ElementsSliceReal);
                     GPU.FreeDevice(DeviceData);
                     _DeviceData = IntPtr.Zero;
                     IsDeviceDirty = false;
@@ -276,6 +280,7 @@ namespace Warp
             if (header == null)
                 header = new HeaderMRC();
             header.Dimensions = IsFT ? DimsFT : Dims;
+            header.Dimensions.X *= IsComplex ? 2 : 1;
 
             float[][] Data = GetHost(Intent.Read);
             float Min = float.MaxValue, Max = -float.MaxValue;
@@ -312,11 +317,8 @@ namespace Warp
 
             if (!IsHalf)
             {
-                IntPtr Temp = GPU.MallocDeviceHalf(ElementsReal);
-                GPU.SingleToHalf(GetDevice(Intent.Read), Temp, ElementsReal);
-
-                Result = new Image(Temp, Dims, IsFT, IsComplex, true);
-                GPU.FreeDevice(Temp);
+                Result = new Image(IntPtr.Zero, Dims, IsFT, IsComplex, true);
+                GPU.SingleToHalf(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), ElementsReal);
             }
             else
             {
@@ -386,6 +388,58 @@ namespace Warp
             return new Image(Region, dimensions, IsFT, IsComplex, IsHalf);
         }
 
+        public Image AsPadded(int2 dimensions)
+        {
+            if (IsHalf)
+                throw new Exception("Half precision not supported for padding.");
+
+            if (IsComplex != IsFT)
+                throw new Exception("FT format can only have complex data for padding purposes.");
+
+            if (IsFT && (new int2(Dims) < dimensions) == (new int2(Dims) > dimensions))
+                throw new Exception("For FT padding/cropping, both dimensions must be either smaller, or bigger.");
+
+            Image Padded = null;
+
+            if (!IsComplex && !IsFT)
+            {
+                Padded = new Image(IntPtr.Zero, new int3(dimensions.X, dimensions.Y, Dims.Z), false, false, false);
+                GPU.Pad(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims.Slice(), new int3(dimensions), (uint)Dims.Z);
+            }
+            else if (IsComplex && IsFT)
+            {
+                Padded = new Image(IntPtr.Zero, new int3(dimensions.X, dimensions.Y, Dims.Z), true, true, false);
+                if (dimensions > new int2(Dims))
+                    GPU.PadFT(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims.Slice(), new int3(dimensions), (uint)Dims.Z);
+                else
+                    GPU.CropFT(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims.Slice(), new int3(dimensions), (uint)Dims.Z);
+            }
+
+            return Padded;
+        }
+
+        public Image AsFFT()
+        {
+            if (IsHalf || IsComplex || IsFT)
+                throw new Exception("Data format not supported.");
+
+            Image FFT = new Image(IntPtr.Zero, Dims, true, true, false);
+            GPU.FFT(GetDevice(Intent.Read), FFT.GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+
+            return FFT;
+        }
+
+        public Image AsIFFT()
+        {
+            if (IsHalf || !IsComplex || !IsFT)
+                throw new Exception("Data format not supported.");
+
+            Image IFFT = new Image(IntPtr.Zero, Dims, false, false, false);
+            GPU.IFFT(GetDevice(Intent.Read), IFFT.GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+
+            return IFFT;
+        }
+
         public Image AsMultipleRegions(int3[] origins, int2 dimensions)
         {
             Image Extracted = new Image(IntPtr.Zero, new int3(dimensions.X, dimensions.Y, origins.Length), false, IsComplex, IsHalf);
@@ -430,205 +484,331 @@ namespace Warp
             return Reduced;
         }
 
-        public void Add(Image summands)
+        public Image AsPolar(uint innerradius = 0, uint exclusiveouterradius = 0)
         {
-            if (Dims.X != summands.Dims.X ||
-                Dims.Y != summands.Dims.Y ||
-                Dims.Z != summands.Dims.Z ||
+            if (IsHalf || IsComplex)
+                throw new Exception("Cannot transform fp16 or complex image.");
+
+            if (exclusiveouterradius == 0)
+                exclusiveouterradius = (uint)Dims.X / 2;
+            exclusiveouterradius = (uint)Math.Min(Dims.X / 2, (int)exclusiveouterradius);
+            uint R = exclusiveouterradius - innerradius;
+
+            if (IsFT)
+            {
+                Image Result = new Image(IntPtr.Zero, new int3((int)R, Dims.Y, Dims.Z));
+                GPU.Cart2PolarFFT(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), DimsSlice, innerradius, exclusiveouterradius, (uint) Dims.Z);
+                return Result;
+            }
+            else
+            {
+                Image Result = new Image(IntPtr.Zero, new int3((int)R, Dims.Y * 2, Dims.Z));
+                GPU.Cart2Polar(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), DimsSlice, innerradius, exclusiveouterradius, (uint)Dims.Z);
+                return Result;
+            }
+        }
+
+        public Image AsAmplitudes()
+        {
+            if (IsHalf || !IsComplex)
+                throw new Exception("Data type not supported.");
+
+            Image Amplitudes = new Image(IntPtr.Zero, Dims, IsFT, false, false);
+            GPU.Amplitudes(GetDevice(Intent.Read), Amplitudes.GetDevice(Intent.Write), ElementsComplex);
+
+            return Amplitudes;
+        }
+
+        public Image AsReal()
+        {
+            if (!IsComplex)
+                throw new Exception("Data must be complex.");
+
+            float[][] Real = new float[Dims.Z][];
+            float[][] Complex = GetHost(Intent.Read);
+            for (int z = 0; z < Real.Length; z++)
+            {
+                float[] ComplexSlice = Complex[z];
+                float[] RealSlice = new float[ComplexSlice.Length / 2];
+                for (int i = 0; i < RealSlice.Length; i++)
+                    RealSlice[i] = ComplexSlice[i * 2];
+
+                Real[z] = RealSlice;
+            }
+
+            return new Image(Real, Dims, IsFT, false, IsHalf);
+        }
+
+        public Image AsImaginary()
+        {
+            if (!IsComplex)
+                throw new Exception("Data must be complex.");
+
+            float[][] Imaginary = new float[Dims.Z][];
+            float[][] Complex = GetHost(Intent.Read);
+            for (int z = 0; z < Imaginary.Length; z++)
+            {
+                float[] ComplexSlice = Complex[z];
+                float[] ImaginarySlice = new float[ComplexSlice.Length / 2];
+                for (int i = 0; i < ImaginarySlice.Length; i++)
+                    ImaginarySlice[i] = ComplexSlice[i * 2 + 1];
+
+                Imaginary[z] = ImaginarySlice;
+            }
+
+            return new Image(Imaginary, Dims, IsFT, false, IsHalf);
+        }
+
+        public void RemapToFT()
+        {
+            if (!IsFT)
+                throw new Exception("Remap only supported for FT layout.");
+
+            if (IsComplex)
+                GPU.RemapToFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            else
+                GPU.RemapToFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+        }
+
+        public void RemapFromFT()
+        {
+            if (!IsFT)
+                throw new Exception("Remap only supported for FT layout.");
+
+            if (IsComplex)
+                GPU.RemapFromFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            else
+                GPU.RemapFromFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+        }
+
+        public void Xray(float ndevs)
+        {
+            if (IsComplex || IsHalf)
+                throw new Exception("Complex and half are not supported.");
+
+            GPU.Xray(GetDevice(Intent.Read), GetDevice(Intent.Write), ndevs, new int2(DimsEffective), (uint)Dims.Z);
+        }
+
+        public void Fill(float val)
+        {
+            float[][] ToFill = GetHost(Intent.Write);
+            foreach (float[] Slice in ToFill)
+                for (int i = 0; i < Slice.Length; i++)
+                    Slice[i] = val;
+        }
+
+        public void Sign()
+        {
+            if (IsHalf)
+                throw new Exception("Does not work for fp16.");
+
+            GPU.Sign(GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+        }
+
+        private void Add(Image summands, uint elements, uint batch)
+        {
+            if (ElementsReal != elements * batch ||
+                summands.ElementsReal != elements ||
                 IsFT != summands.IsFT ||
                 IsComplex != summands.IsComplex)
                 throw new DimensionMismatchException();
 
             if (IsHalf && summands.IsHalf)
             {
-                GPU.AddHalf(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                GPU.AddToSlicesHalf(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
             else if (!IsHalf && !summands.IsHalf)
             {
-                GPU.Add(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                GPU.AddToSlices(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
             else
             {
                 Image ThisSingle = AsSingle();
                 Image SummandsSingle = summands.AsSingle();
 
-                GPU.Add(ThisSingle.GetDevice(Intent.Read), SummandsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsReal);
+                GPU.AddToSlices(ThisSingle.GetDevice(Intent.Read), SummandsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), elements, batch);
 
                 if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
                 else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
 
                 ThisSingle.Dispose();
                 SummandsSingle.Dispose();
             }
         }
 
+        public void Add(Image summands)
+        {
+            Add(summands, (uint) ElementsReal, 1);
+        }
+
         public void AddToSlices(Image summands)
         {
-            if (Dims.X != summands.Dims.X ||
-                Dims.Y != summands.Dims.Y ||
-                IsFT != summands.IsFT ||
-                IsComplex != summands.IsComplex)
+            Add(summands, (uint) ElementsSliceReal, (uint) Dims.Z);
+        }
+
+        public void AddToLines(Image summands)
+        {
+            Add(summands, (uint) ElementsLineReal, (uint) (Dims.Y * Dims.Z));
+        }
+
+        private void Subtract(Image subtrahends, uint elements, uint batch)
+        {
+            if (ElementsReal != elements * batch ||
+                subtrahends.ElementsReal != elements ||
+                IsFT != subtrahends.IsFT ||
+                IsComplex != subtrahends.IsComplex)
                 throw new DimensionMismatchException();
 
-            if (IsHalf && summands.IsHalf)
+            if (IsHalf && subtrahends.IsHalf)
             {
-                GPU.AddToSlicesHalf(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
+                GPU.SubtractFromSlicesHalf(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
-            else if (!IsHalf && !summands.IsHalf)
+            else if (!IsHalf && !subtrahends.IsHalf)
             {
-                GPU.AddToSlices(GetDevice(Intent.Read), summands.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
+                GPU.SubtractFromSlices(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
             else
             {
                 Image ThisSingle = AsSingle();
-                Image SummandsSingle = summands.AsSingle();
+                Image SubtrahendsSingle = subtrahends.AsSingle();
 
-                GPU.AddToSlices(ThisSingle.GetDevice(Intent.Read), SummandsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
+                GPU.SubtractFromSlices(ThisSingle.GetDevice(Intent.Read), SubtrahendsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), elements, batch);
 
                 if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
                 else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
 
                 ThisSingle.Dispose();
-                SummandsSingle.Dispose();
+                SubtrahendsSingle.Dispose();
             }
         }
 
         public void Subtract(Image subtrahends)
         {
-            if (Dims.X != subtrahends.Dims.X ||
-                Dims.Y != subtrahends.Dims.Y ||
-                Dims.Z != subtrahends.Dims.Z ||
-                IsFT != subtrahends.IsFT ||
-                IsComplex != subtrahends.IsComplex)
-                throw new DimensionMismatchException();
-
-            if (IsHalf && subtrahends.IsHalf)
-            {
-                GPU.SubtractHalf(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-            }
-            else if (!IsHalf && !subtrahends.IsHalf)
-            {
-                GPU.Subtract(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-            }
-            else
-            {
-                Image ThisSingle = AsSingle();
-                Image SubtrahendsSingle = subtrahends.AsSingle();
-
-                GPU.Subtract(ThisSingle.GetDevice(Intent.Read), SubtrahendsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsReal);
-
-                if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-                else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-
-                ThisSingle.Dispose();
-                SubtrahendsSingle.Dispose();
-            }
+            Subtract(subtrahends, (uint) ElementsReal, 1);
         }
 
         public void SubtractFromSlices(Image subtrahends)
         {
-            if (Dims.X != subtrahends.Dims.X ||
-                Dims.Y != subtrahends.Dims.Y ||
-                IsFT != subtrahends.IsFT ||
-                IsComplex != subtrahends.IsComplex)
+            Subtract(subtrahends, (uint) ElementsSliceReal, (uint) Dims.Z);
+        }
+
+        public void SubtractFromLines(Image subtrahends)
+        {
+            Subtract(subtrahends, (uint) ElementsLineReal, (uint) (Dims.Y * Dims.Z));
+        }
+
+        private void Multiply(Image multiplicators, uint elements, uint batch)
+        {
+            if (ElementsComplex != elements * batch ||
+                multiplicators.ElementsComplex != elements ||
+                IsFT != multiplicators.IsFT ||
+                multiplicators.IsComplex)
                 throw new DimensionMismatchException();
 
-            if (IsHalf && subtrahends.IsHalf)
+            if (!IsComplex)
             {
-                GPU.SubtractFromSlicesHalf(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
-            }
-            else if (!IsHalf && !subtrahends.IsHalf)
-            {
-                GPU.SubtractFromSlices(GetDevice(Intent.Read), subtrahends.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
+                if (IsHalf && multiplicators.IsHalf)
+                {
+                    GPU.MultiplySlicesHalf(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
+                }
+                else if (!IsHalf && !multiplicators.IsHalf)
+                {
+                    GPU.MultiplySlices(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
+                }
+                else
+                {
+                    Image ThisSingle = AsSingle();
+                    Image MultiplicatorsSingle = multiplicators.AsSingle();
+
+                    GPU.MultiplySlices(ThisSingle.GetDevice(Intent.Read), MultiplicatorsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), elements, batch);
+
+                    if (IsHalf)
+                        GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
+                    else
+                        GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
+
+                    ThisSingle.Dispose();
+                    MultiplicatorsSingle.Dispose();
+                }
             }
             else
             {
-                Image ThisSingle = AsSingle();
-                Image SubtrahendsSingle = subtrahends.AsSingle();
-
-                GPU.SubtractFromSlices(ThisSingle.GetDevice(Intent.Read), SubtrahendsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
-
                 if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-                else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-
-                ThisSingle.Dispose();
-                SubtrahendsSingle.Dispose();
+                    throw new Exception("Complex multiplication not supported for fp16.");
+                GPU.MultiplyComplexSlicesByScalar(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
         }
 
         public void Multiply(Image multiplicators)
         {
-            if (Dims.X != multiplicators.Dims.X ||
-                Dims.Y != multiplicators.Dims.Y ||
-                Dims.Z != multiplicators.Dims.Z ||
-                IsFT != multiplicators.IsFT ||
-                IsComplex != multiplicators.IsComplex)
-                throw new DimensionMismatchException();
-
-            if (IsHalf && multiplicators.IsHalf)
-            {
-                GPU.MultiplyHalf(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-            }
-            else if (!IsHalf && !multiplicators.IsHalf)
-            {
-                GPU.Multiply(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-            }
-            else
-            {
-                Image ThisSingle = AsSingle();
-                Image MultiplicatorsSingle = multiplicators.AsSingle();
-
-                GPU.Multiply(ThisSingle.GetDevice(Intent.Read), MultiplicatorsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsReal);
-
-                if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-                else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-
-                ThisSingle.Dispose();
-                MultiplicatorsSingle.Dispose();
-            }
+            Multiply(multiplicators, (uint) ElementsComplex, 1);
         }
 
         public void MultiplySlices(Image multiplicators)
         {
-            if (Dims.X != multiplicators.Dims.X ||
-                Dims.Y != multiplicators.Dims.Y ||
-                IsFT != multiplicators.IsFT ||
-                IsComplex != multiplicators.IsComplex)
+            Multiply(multiplicators, (uint) ElementsSliceComplex, (uint) Dims.Z);
+        }
+
+        public void MultiplyLines(Image multiplicators)
+        {
+            Multiply(multiplicators, (uint) ElementsLineComplex, (uint) (Dims.Y * Dims.Z));
+        }
+
+        private void Divide(Image divisors, uint elements, uint batch)
+        {
+            if (ElementsComplex != elements * batch ||
+                divisors.ElementsComplex != elements ||
+                IsFT != divisors.IsFT ||
+                divisors.IsComplex)
                 throw new DimensionMismatchException();
 
-            if (IsHalf && multiplicators.IsHalf)
+            if (!IsComplex)
             {
-                GPU.MultiplySlicesHalf(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
-            }
-            else if (!IsHalf && !multiplicators.IsHalf)
-            {
-                GPU.MultiplySlices(GetDevice(Intent.Read), multiplicators.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
+                if (!IsHalf && !divisors.IsHalf)
+                {
+                    GPU.DivideSlices(GetDevice(Intent.Read), divisors.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
+                }
+                else
+                {
+                    Image ThisSingle = AsSingle();
+                    Image DivisorsSingle = divisors.AsSingle();
+
+                    GPU.DivideSlices(ThisSingle.GetDevice(Intent.Read), DivisorsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), elements, batch);
+
+                    if (IsHalf)
+                        GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
+                    else
+                        GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), elements * batch);
+
+                    ThisSingle.Dispose();
+                    DivisorsSingle.Dispose();
+                }
             }
             else
             {
-                Image ThisSingle = AsSingle();
-                Image MultiplicatorsSingle = multiplicators.AsSingle();
-
-                GPU.MultiplySlices(ThisSingle.GetDevice(Intent.Read), MultiplicatorsSingle.GetDevice(Intent.Read), ThisSingle.GetDevice(Intent.Write), ElementsSliceReal, (uint)Dims.Z);
-
                 if (IsHalf)
-                    GPU.HalfToSingle(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-                else
-                    GPU.CopyDeviceToDevice(ThisSingle.GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
-
-                ThisSingle.Dispose();
-                MultiplicatorsSingle.Dispose();
+                    throw new Exception("Complex division not supported for fp16.");
+                GPU.DivideComplexSlicesByScalar(GetDevice(Intent.Read), divisors.GetDevice(Intent.Read), GetDevice(Intent.Write), elements, batch);
             }
+        }
+
+        public void Divide(Image divisors)
+        {
+            Divide(divisors, (uint)ElementsComplex, 1);
+        }
+
+        public void DivideSlices(Image divisors)
+        {
+            Divide(divisors, (uint)ElementsSliceComplex, (uint)Dims.Z);
+        }
+
+        public void DivideLines(Image divisors)
+        {
+            Divide(divisors, (uint)ElementsLineComplex, (uint)(Dims.Y * Dims.Z));
         }
 
         public void ShiftSlices(float3[] shifts)
@@ -638,14 +818,14 @@ namespace Warp
 
             IntPtr Data;
             if (!IsHalf)
-                Data = GetDevice(Intent.Write);
+                Data = GetDevice(Intent.ReadWrite);
             else
             {
                 Data = GPU.MallocDevice(ElementsReal);
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
 
-            GPU.ShiftStack(Data, Data, new int3(DimsEffective.X, DimsEffective.Y, 1), Helper.ToInterleaved(shifts), (uint)Dims.Z);
+            GPU.ShiftStack(Data, Data, DimsEffective.Slice(), Helper.ToInterleaved(shifts), (uint)Dims.Z);
 
             if (IsHalf)
             {
