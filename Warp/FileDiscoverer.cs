@@ -73,6 +73,9 @@ namespace Warp
         {
             while (true)
             {
+                if (ShouldAbort)
+                    return;
+
                 foreach (var fileName in Directory.EnumerateFiles(FolderPath, FileExtension, SearchOption.TopDirectoryOnly))
                 {
                     if (ShouldAbort)
@@ -101,7 +104,11 @@ namespace Warp
                         else if (CurrentState.Item2.ElapsedMilliseconds > 1000)
                         {
                             Incubator.Remove(CurrentState);
-                            MainWindow.Options.Movies.Add(new Movie(fileName));
+
+                            if (!fileName.Substring(fileName.Length - 4).ToLower().Contains("ali"))
+                                MainWindow.Options.Movies.Add(new Movie(fileName));
+                            else
+                                MainWindow.Options.Movies.Add(new TiltSeries(fileName));
                         }
                     }
                 }

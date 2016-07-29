@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:Warp.Controls"
              mc:Ignorable="d" 
              d:DesignHeight="300" d:DesignWidth="300">
-    <Grid Background="Transparent" PreviewMouseWheel="MainGrid_OnPreviewMouseWheel" PreviewMouseLeftButtonUp="MainGrid_OnPreviewMouseLeftButtonUp">
+    <Grid Background="Transparent" PreviewMouseWheel="MainGrid_OnPreviewMouseWheel" MouseLeftButtonUp="MainGrid_OnMouseLeftButtonUp">
         <Grid.RowDefinitions>
             <RowDefinition />
             <RowDefinition Height="4" />
@@ -16,6 +16,6 @@
         <TextBlock Grid.Row="0" Name="TextNumberProcessed" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,3" />
         <StackPanel Grid.Row="1" Name="PanelSegments" Orientation="Horizontal" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Opacity="0.5" />
         <Path Grid.Row="2" Name="PathPosition" HorizontalAlignment="Left" VerticalAlignment="Top" Width="8" Height="4" Stretch="Fill" Fill="#FF000000" Data="F1 M 27.1669,36.3317L 29.7664,33.3319L 24.5674,33.3319L 27.1669,36.3317 Z "/>
-        <TextBlock Grid.Row="3" Name="TextCurrentName" HorizontalAlignment="Left" VerticalAlignment="Top" />
+        <CheckBox Grid.Row="3" Name="TextCurrentName" Content="{Binding DisplayedMovie.RootName}" IsChecked="{Binding DisplayedMovie.DoProcess}"  HorizontalAlignment="Left" VerticalAlignment="Top" />
     </Grid>
 </UserControl>

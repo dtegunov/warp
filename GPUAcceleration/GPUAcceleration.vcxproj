@@ -15,6 +15,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Post.cu" />
+    <CudaCompile Include="Comparison.cu" />
+    <CudaCompile Include="ParticleCTF.cu" />
+    <CudaCompile Include="ParticleShift.cu" />
+    <CudaCompile Include="Polishing.cu" />
     <CudaCompile Include="Tools.cu" />
     <CudaCompile Include="CTF.cu" />
     <ClCompile Include="Cubic.cpp" />
@@ -58,7 +62,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)bin\</OutDir>
+    <OutDir>$(SolutionDir)bin\Debug\</OutDir>
     <IncludePath>$(CUDA_PATH)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <LibraryPath>..\..\gtom\x64\Debug;$(CUDA_PATH)\lib\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);</LibraryPath>
   </PropertyGroup>
@@ -88,7 +92,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
-      <CodeGeneration>compute_52,sm_52</CodeGeneration>
+      <CodeGeneration>compute_35,sm_35</CodeGeneration>
       <PtxAsOptionV>true</PtxAsOptionV>
       <GenerateLineInfo>true</GenerateLineInfo>
       <GPUDebugInfo>false</GPUDebugInfo>
@@ -108,6 +112,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <AdditionalOptions>
       </AdditionalOptions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>false</GenerateDebugInformation>

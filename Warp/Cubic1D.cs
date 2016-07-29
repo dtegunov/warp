@@ -158,7 +158,26 @@ namespace Warp
 
         public static Cubic1D Fit(float2[] data, int numnodes)
         {
-            float MinX = MathHelper.Min(data.Select(p => p.X)), MaxX = MathHelper.Max(data.Select(p => p.X)), ScaleX = 1f / (MaxX - MinX);
+            List<float2> Fitted = new List<float2>();
+
+            int Extent = Math.Max(data.Length / (numnodes - 1) / 2, 1);
+            for (int n = 0; n < numnodes; n++)
+            {
+                float Sum = 0;
+                int Samples = 0;
+                int Middle = n * (data.Length / (numnodes - 1));
+                int Start = Math.Max(0, Middle - Extent);
+                int Finish = Math.Min(data.Length, Middle + Extent);
+
+                for (int i = Start; i < Finish; i++, Samples++)
+                    Sum += data[i].Y;
+
+                Fitted.Add(new float2(data[Middle].X, Sum / Samples));
+            }
+
+            return new Cubic1D(Fitted.ToArray());
+
+            /*float MinX = MathHelper.Min(data.Select(p => p.X)), MaxX = MathHelper.Max(data.Select(p => p.X)), ScaleX = 1f / (MaxX - MinX);
             float MinY = MathHelper.Min(data.Select(p => p.Y)), MaxY = MathHelper.Max(data.Select(p => p.Y)), ScaleY = 1f / (MaxY - MinY);
             if (float.IsNaN(ScaleY))
                 ScaleY = 1f;
@@ -226,7 +245,7 @@ namespace Warp
                     Nodes[i] = new float2((float)NodeX[i] / ScaleX + MinX, (float)Optimizer.Solution[i] / ScaleY + MinY);
 
                 return new Cubic1D(Nodes);
-            }
+            }*/
         }
 
         public static void FitCTF(float2[] data, Func<float[], float[]> approximation, float[] zeros, float[] peaks, out Cubic1D background, out Cubic1D scale)
@@ -236,23 +255,33 @@ namespace Warp
             if (float.IsNaN(ScaleY))
                 ScaleY = 1f;
 
-            peaks = peaks.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 2 == 0).ToArray();
-            zeros = zeros.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 2 == 0).ToArray();
+            peaks = peaks.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 1 == 0).ToArray();
+            zeros = zeros.Where(v => v >= MinX && v <= MaxX).Where((v, i) => i % 1 == 0).ToArray();
 
             float2[] ScaledData = data.Select(p => new float2((p.X - MinX) * ScaleX, (p.Y - MinY) * ScaleY)).ToArray();
             float StdY = MathHelper.StdDev(data.Select(p => p.Y).ToArray());
 
             double[] Start = new double[zeros.Length + peaks.Length];
             double[] NodeX = new double[zeros.Length + peaks.Length];
+            Cubic1D DataSpline = new Cubic1D(data);
             for (int i = 0; i < zeros.Length; i++)
             {
                 NodeX[i] = (zeros[i] - MinX) * ScaleX;
-                Start[i] = ScaledData[(int)((zeros[i] - MinX) / (MaxX - MinX) * (data.Length - 1))].Y;
+                Start[i] = DataSpline.Interp(zeros[i]) - MinY;
             }
-            for (int i = 0; i < peaks.Length; i++)
             {
-                NodeX[i + zeros.Length] = (peaks[i] - MinX) * ScaleX;
-                Start[i + zeros.Length] = StdY;
+                Cubic1D PreliminaryBackground = new Cubic1D(Helper.Zip(NodeX.Take(zeros.Length).Select(v => (float)v).ToArray(),
+                                                                       Start.Take(zeros.Length).Select(v => (float)v).ToArray()));
+                float[] PreliminaryInterpolated = PreliminaryBackground.Interp(data.Select(v => (v.X - MinX) * ScaleX).ToArray());
+                float2[] BackgroundSubtracted = data.Select((v, i) => new float2(v.X, v.Y - MinY - PreliminaryInterpolated[i])).ToArray();
+                Cubic1D BackgroundSpline = new Cubic1D(BackgroundSubtracted);
+
+                for (int i = 0; i < peaks.Length; i++)
+                {
+                    NodeX[i + zeros.Length] = (peaks[i] - MinX) * ScaleX;
+                    float PeakValue = BackgroundSpline.Interp(peaks[i]);
+                    Start[i + zeros.Length] = Math.Max(0.0001f, PeakValue);
+                }
             }
 
             float[] DataX = ScaledData.Select(p => p.X).ToArray();
@@ -276,37 +305,41 @@ namespace Warp
                 for (int i = 0; i < peaks.Length; i++)
                     NodesScaleCopy[i] = new float2(NodesScale[i].X, (float)input[i + zeros.Length]);
 
-                float[] InterpolatedBackground = (new Cubic1D(NodesBackgroundCopy)).Interp(DataX);
-                float[] InterpolatedScale = (new Cubic1D(NodesScaleCopy)).Interp(DataX);
+                float[] InterpolatedBackground = new Cubic1D(NodesBackgroundCopy).Interp(DataX);
+                float[] InterpolatedScale = new Cubic1D(NodesScaleCopy).Interp(DataX);
 
-                float Sum = 0f;
+                double Sum = 0f;
                 for (int i = 0; i < ScaledData.Length; i++)
                 {
-                    float Diff = ScaledData[i].Y - (InterpolatedBackground[i] + SimulatedCTF[i] * InterpolatedScale[i]) * ScaleY;
+                    double Diff = ScaledData[i].Y - (InterpolatedBackground[i] + SimulatedCTF[i] * (double)InterpolatedScale[i]) * ScaleY;
                     Sum += Diff * Diff;
+                    if (InterpolatedScale[i] < 0.0005f)
+                        Sum += (0.0005 - InterpolatedScale[i]) * 10;
                 }
 
-                return Math.Sqrt(Sum / data.Length) * 100000;
+                //return Math.Sqrt(Sum / data.Length) * 10;
+                return 0;
             };
 
             Func<double[], double[]> Gradient = input =>
             {
                 double[] Result = new double[input.Length];
 
-                Parallel.For(0, input.Length, i =>
+                //Parallel.For(0, input.Length, i =>
+                for (int i = 0; i < input.Length; i++)
                 {
                     double[] UpperInput = new double[input.Length];
                     input.CopyTo(UpperInput, 0);
-                    UpperInput[i] += 0.005;
+                    UpperInput[i] += 0.0001;
                     double UpperValue = Eval(UpperInput);
 
                     double[] LowerInput = new double[input.Length];
                     input.CopyTo(LowerInput, 0);
-                    LowerInput[i] -= 0.005;
+                    LowerInput[i] -= 0.0001;
                     double LowerValue = Eval(LowerInput);
 
-                    Result[i] = (UpperValue - LowerValue) / 0.01;
-                });
+                    Result[i] = (UpperValue - LowerValue) / 0.0002;
+                }//);
 
                 return Result;
             };
@@ -318,7 +351,7 @@ namespace Warp
                 for (int i = 0; i < zeros.Length; i++)
                     NodesBackground[i] = new float2((float) NodeX[i] / ScaleX + MinX, (float) Optimizer.Solution[i] + MinY);
                 for (int i = 0; i < peaks.Length; i++)
-                    NodesScale[i] = new float2((float)NodeX[i + zeros.Length] / ScaleX + MinX, (float)Optimizer.Solution[i + zeros.Length]);
+                    NodesScale[i] = new float2((float)NodeX[i + zeros.Length] / ScaleX + MinX, Math.Max(0.001f, (float)Optimizer.Solution[i + zeros.Length]));
 
                 background = new Cubic1D(NodesBackground);
                 scale = new Cubic1D(NodesScale);

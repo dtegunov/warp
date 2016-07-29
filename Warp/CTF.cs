@@ -100,7 +100,7 @@ namespace Warp
             get { return _DefocusAngle; }
             set
             {
-                value = (decimal) Accord.Math.Tools.Mod((double)value + 180.0, 180.0);
+                //value = (decimal) Accord.Math.Tools.Mod((double)value + 180.0, 180.0);
                 if (value != _DefocusAngle)
                 {
                     _DefocusAngle = value; OnPropertyChanged();
@@ -159,7 +159,7 @@ namespace Warp
             _Amplitude = (decimal) s.Amplitude;
 
             _Defocus = (decimal) -s.Defocus * 1e6M;
-            _DefocusDelta = (decimal) s.DefocusDelta * 1e6M;
+            _DefocusDelta = (decimal) -s.DefocusDelta * 1e6M;
             _DefocusAngle = (decimal) s.AstigmatismAngle * (180M / (decimal)Math.PI);
 
             //_Bfactor = (decimal) s.Bfactor * 1e20M;
@@ -183,7 +183,7 @@ namespace Warp
             Result.Amplitude = (float)Amplitude;
 
             Result.Defocus = (float)(-Defocus * 1e-6M);
-            Result.DefocusDelta = (float)(DefocusDelta * 1e-6M);
+            Result.DefocusDelta = (float)(-DefocusDelta * 1e-6M);
             Result.AstigmatismAngle = (float)DefocusAngle / (float)(180.0 / Math.PI);
 
             Result.Bfactor = (float)(Bfactor * 1e-20M);
@@ -218,14 +218,14 @@ namespace Warp
             double K1 = Math.PI * lambda;
             double K2 = Math.PI * 0.5f * cs * lambda * lambda * lambda;
             double K3 = Math.Sqrt(1f - amplitude * amplitude);
-            double K4 = -(double)Bfactor * 0.25f;
+            double K4 = (double)Bfactor * 0.25f;
 
             double r2 = freq * freq;
             double r4 = r2 * r2;
 
             double deltaf = defocus;
             double argument = K1 * deltaf * r2 + K2 * r4 - phaseshift;
-            double retval = amplitude * (float)Math.Cos(argument) - K3 * (float)Math.Sin(argument);
+            double retval = amplitude * Math.Cos(argument) - K3 * Math.Sin(argument);
 
             if (K4 != 0)
                 retval *= Math.Exp(K4 * r2);
@@ -234,6 +234,48 @@ namespace Warp
                 retval = Math.Abs(retval * retval);
 
             return (float)(scale * retval);
+        }
+
+        public double[] Get1DDouble(int width, bool ampsquared, bool ignorebfactor = false, bool ignorescale = false)
+        {
+            double[] Output = new double[width];
+
+            double ny = 0.5 / (double)PixelSize / width;
+
+            for (int i = 0; i < width; i++)
+                Output[i] = Get1DDouble(i * ny, ampsquared, ignorebfactor, ignorescale);
+
+            return Output;
+        }
+
+        public double Get1DDouble(double freq, bool ampsquared, bool ignorebfactor = false, bool ignorescale = false)
+        {
+            double voltage = (double)Voltage * 1e3;
+            double lambda = 12.2643247 / Math.Sqrt(voltage * (1.0 + voltage * 0.978466e-6));
+            double defocus = -(double)Defocus * 1e4;
+            double cs = (double)Cs * 1e7;
+            double amplitude = (double)Amplitude;
+            double scale = (double)Scale;
+            double phaseshift = (double)PhaseShift * Math.PI;
+            double K1 = Math.PI * lambda;
+            double K2 = Math.PI * 0.5f * cs * lambda * lambda * lambda;
+            double K3 = Math.Sqrt(1f - amplitude * amplitude);
+            double K4 = (double)Bfactor * 0.25f;
+
+            double r2 = freq * freq;
+            double r4 = r2 * r2;
+
+            double deltaf = defocus;
+            double argument = K1 * deltaf * r2 + K2 * r4 - phaseshift;
+            double retval = amplitude * Math.Cos(argument) - K3 * Math.Sin(argument);
+
+            if (K4 != 0)
+                retval *= Math.Exp(K4 * r2);
+
+            if (ampsquared)
+                retval = Math.Abs(retval * retval);
+
+            return scale * retval;
         }
 
         public float[] Get2D(float2[] coordinates, bool ampsquared, bool ignorebfactor = false, bool ignorescale = false)
@@ -246,7 +288,7 @@ namespace Warp
             float voltage = (float)Voltage * 1e3f;
             float lambda = 12.2643247f / (float)Math.Sqrt(voltage * (1.0f + voltage * 0.978466e-6f));
             float defocus = -(float)Defocus * 1e4f;
-            float defocusdelta = (float) DefocusDelta * 1e4f * 0.5f;
+            float defocusdelta = -(float)DefocusDelta * 1e4f * 0.5f;
             float astigmatismangle = (float) DefocusAngle / (float)(180.0 / Math.PI);
             float cs = (float)Cs * 1e7f;
             float amplitude = (float)Amplitude;
@@ -255,7 +297,7 @@ namespace Warp
             float K1 = (float)Math.PI * lambda;
             float K2 = (float)Math.PI * 0.5f * cs * lambda * lambda * lambda;
             float K3 = (float)Math.Sqrt(1f - amplitude * amplitude);
-            float K4 = -(float)Bfactor * 0.25f;
+            float K4 = (float)Bfactor * 0.25f;
 
             Parallel.For(0, coordinates.Length, i =>
             {
@@ -295,8 +337,8 @@ namespace Warp
         {
             List<float> Result = new List<float>();
 
-            float[] Values = Get1D(1 << 15, false);
-            float[] dValues = MathHelper.Diff(Values);
+            double[] Values = Get1DDouble(1 << 12, false);
+            double[] dValues = MathHelper.Diff(Values);
 
             for (int i = 0; i < dValues.Length - 1; i++)
                 if (Math.Sign(dValues[i]) != Math.Sign(dValues[i + 1]))
@@ -309,7 +351,7 @@ namespace Warp
         {
             List<float> Result = new List<float>();
 
-            float[] Values = Get1D(1 << 15, false);
+            double[] Values = Get1DDouble(1 << 12, false);
 
             for (int i = 0; i < Values.Length - 1; i++)
                 if (Math.Sign(Values[i]) != Math.Sign(Values[i + 1]))

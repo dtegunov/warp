@@ -14,11 +14,14 @@ namespace Warp
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "SetDevice")]
         public static extern void SetDevice(int id);
 
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "GetDevice")]
+        public static extern int GetDevice();
+
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "GetFreeMemory")]
-        public static extern long GetFreeMemory();
+        public static extern long GetFreeMemory(int device);
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "GetTotalMemory")]
-        public static extern long GetTotalMemory();
+        public static extern long GetTotalMemory(int device);
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "MallocDevice")]
         public static extern IntPtr MallocDevice(long elements);
@@ -58,6 +61,19 @@ namespace Warp
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "HalfToSingle")]
         public static extern void HalfToSingle(IntPtr d_source, IntPtr d_dest, long elements);
+
+        // Comparison.cu:
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CompareParticles")]
+        public static extern void CompareParticles(IntPtr d_particles,
+                                                   IntPtr d_masks,
+                                                   IntPtr d_projections,
+                                                   int2 dims,
+                                                   IntPtr d_ctfcoords,
+                                                   CTFStruct[] h_ctfparams,
+                                                   float highpass,
+                                                   float lowpass,
+                                                   IntPtr d_scores,
+                                                   uint nparticles);
 
         // CTF.cu:
 
@@ -109,10 +125,64 @@ namespace Warp
                                                         IntPtr d_output, 
                                                         uint batch);
 
+        // ParticleCTF.cu:
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CreateParticleSpectra")]
+        public static extern void CreateParticleSpectra(IntPtr d_frame,
+                                                        int2 dimsframe,
+                                                        int nframes,
+                                                        int3[] h_origins,
+                                                        int norigins,
+                                                        IntPtr d_masks,
+                                                        int2 dimsregion,
+                                                        bool ctftime,
+                                                        int framegroupsize,
+                                                        float majorpixel,
+                                                        float minorpixel,
+                                                        float majorangle,
+                                                        IntPtr d_outputall);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ParticleCTFMakeAverage")]
+        public static extern void ParticleCTFMakeAverage(IntPtr d_ps,
+                                                         IntPtr d_pscoords,
+                                                         uint length,
+                                                         uint sidelength,
+                                                         CTFStruct[] h_sourceparams,
+                                                         CTFStruct targetparams,
+                                                         uint minbin,
+                                                         uint maxbin,
+                                                         uint batch,
+                                                         IntPtr d_output);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ParticleCTFCompareToSim")]
+        public static extern void ParticleCTFCompareToSim(IntPtr d_ps,
+                                                          IntPtr d_pscoords,
+                                                          IntPtr d_ref,
+                                                          IntPtr d_invsigma,
+                                                          uint length,
+                                                          CTFStruct[] h_sourceparams,
+                                                          float[] h_scores,
+                                                          uint nframes,
+                                                          uint batch);
+
+
         // Post.cu:
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "DoseWeighting")]
         public static extern void DoseWeighting(IntPtr d_freq, IntPtr d_output, uint length, float[] h_dose, float3 nikoconst, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CorrectMagAnisotropy")]
+        public static extern void CorrectMagAnisotropy(IntPtr d_image,
+                                                       int2 dimsimage,
+                                                       IntPtr d_scaled,
+                                                       int2 dimsscaled,
+                                                       float majorpixel,
+                                                       float minorpixel,
+                                                       float majorangle,
+                                                       uint supersample,
+                                                       uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "NormParticles")]
+        public static extern void NormParticles(IntPtr d_input, IntPtr d_output, int3 dims, uint particleradius, bool flipsign, uint batch);
 
         // Shift.cu:
 
@@ -162,6 +232,71 @@ namespace Warp
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CreateMotionBlur")]
         public static extern void CreateMotionBlur(IntPtr d_output, int3 dims, float[] h_shifts, uint nshifts, uint batch);
 
+        // ParticleShift.cu:
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CreateParticleShift")]
+        public static extern void CreateParticleShift(IntPtr d_frame,
+                                                      int2 dimsframe,
+                                                      int nframes,
+                                                      float[] h_positions,
+                                                      float[] h_shifts,
+                                                      int npositions,
+                                                      int2 dimsregion,
+                                                      long[] h_indices,
+                                                      uint indiceslength,
+                                                      IntPtr d_masks,
+                                                      IntPtr d_projections,
+                                                      CTFStruct[] h_ctfparams,
+                                                      IntPtr d_ctfcoords,
+                                                      IntPtr d_invsigma,
+                                                      float pixelmajor,
+                                                      float pixelminor,
+                                                      float pixelangle,
+                                                      IntPtr d_outputparticles,
+                                                      IntPtr d_outputprojections,
+                                                      IntPtr d_outputinvsigma);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ParticleShiftGetDiff")]
+        public static extern void ParticleShiftGetDiff(IntPtr d_phase,
+                                                       IntPtr d_projections,
+                                                       IntPtr d_shiftfactors,
+                                                       IntPtr d_invsigma,
+                                                       uint length,
+                                                       uint probelength,
+                                                       IntPtr d_shifts,
+                                                       float[] h_diff,
+                                                       uint npositions,
+                                                       uint nframes);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ParticleShiftGetGrad")]
+        public static extern void ParticleShiftGetGrad(IntPtr d_phase,
+                                                       IntPtr d_average,
+                                                       IntPtr d_shiftfactors,
+                                                       IntPtr d_invsigma,
+                                                       uint length,
+                                                       uint probelength,
+                                                       IntPtr d_shifts,
+                                                       float[] h_grad,
+                                                       uint npositions,
+                                                       uint nframes);
+
+        // Polishing.cu:
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "CreatePolishing")]
+        public static extern void CreatePolishing(IntPtr d_particles, IntPtr d_particlesft, IntPtr d_masks, int2 dims, int2 dimscropped, int nparticles, int nframes);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "PolishingGetDiff")]
+        public static extern void PolishingGetDiff(IntPtr d_phase,
+                                                   IntPtr d_average,
+                                                   IntPtr d_shiftfactors,
+                                                   IntPtr d_ctfcoords,
+                                                   CTFStruct[] h_ctfparams,
+                                                   IntPtr d_invsigma,
+                                                   int2 dims,
+                                                   IntPtr d_shifts,
+                                                   float[] h_diff,
+                                                   float[] h_diffall,
+                                                   uint npositions,
+                                                   uint nframes);
+
         // Tools.cu:
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "FFT")]
@@ -190,6 +325,12 @@ namespace Warp
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "RemapFromFTFloat")]
         public static extern void RemapFromFTFloat(IntPtr d_input, IntPtr d_output, int3 dims, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "RemapFullToFTFloat")]
+        public static extern void RemapFullToFTFloat(IntPtr d_input, IntPtr d_output, int3 dims, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "RemapFullFromFTFloat")]
+        public static extern void RemapFullFromFTFloat(IntPtr d_input, IntPtr d_output, int3 dims, uint batch);
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Extract")]
         public static extern void Extract(IntPtr d_input,
@@ -250,6 +391,9 @@ namespace Warp
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Xray")]
         public static extern void Xray(IntPtr d_input, IntPtr d_output, float ndevs, int2 dims, uint batch);
 
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Abs")]
+        public static extern void Abs(IntPtr d_input, IntPtr d_output, long length);
+
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Amplitudes")]
         public static extern void Amplitudes(IntPtr d_input, IntPtr d_output, long length);
 
@@ -282,5 +426,21 @@ namespace Warp
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "DivideComplexSlicesByScalar")]
         public static extern void DivideComplexSlicesByScalar(IntPtr d_input, IntPtr d_divisors, IntPtr d_output, long sliceelements, uint slices);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Scale")]
+        public static extern void Scale(IntPtr d_input, IntPtr d_output, int3 dimsinput, int3 dimsoutput, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ProjectForward")]
+        public static extern void ProjectForward(IntPtr d_inputft, IntPtr d_outputft, int3 dimsinput, int2 dimsoutput, float[] h_angles, float supersample, uint batch);
+    }
+
+    public class DeviceToken
+    {
+        public int ID;
+
+        public DeviceToken(int id)
+        {
+            ID = id;
+        }
     }
 }

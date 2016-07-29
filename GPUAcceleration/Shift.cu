@@ -4,9 +4,9 @@ using namespace gtom;
 
 #define SHIFT_THREADS 128
 
-__global__ void ShiftGetAverageKernel(half2* d_phase, half2* d_average, half2* d_shiftfactors, half2* d_shifts, uint length, uint probelength, uint nspectra, uint nframes);
-__global__ void ShiftGetDiffKernel(half2* d_phase, half2* d_average, half2* d_shiftfactors, uint length, uint probelength, half2* d_shifts, float* d_diff);
-__global__ void ShiftGetGradKernel(half2* d_phase, half2* d_average, half2* d_shiftfactors, uint length, uint probelength, half2* d_shifts, float2* d_grad);
+__global__ void ShiftGetAverageKernel(float2* d_phase, float2* d_average, float2* d_shiftfactors, float2* d_shifts, uint length, uint probelength, uint nspectra, uint nframes);
+__global__ void ShiftGetDiffKernel(float2* d_phase, float2* d_average, float2* d_shiftfactors, uint length, uint probelength, float2* d_shifts, float* d_diff);
+__global__ void ShiftGetGradKernel(float2* d_phase, float2* d_average, float2* d_shiftfactors, uint length, uint probelength, float2* d_shifts, float2* d_grad);
 
 /*
 
@@ -23,7 +23,7 @@ __declspec(dllexport) void CreateShift(float* d_frame,
 										int2 dimsregion,
 										size_t* h_mask,
 										uint masklength,
-										half2* d_outputall)
+										float2* d_outputall)
 {
 	int2 dimsunpadded = toInt2(dimsregion.x / 1, dimsregion.y / 1);
 
@@ -44,9 +44,8 @@ __declspec(dllexport) void CreateShift(float* d_frame,
 		//d_WriteMRC(d_temp, toInt3(dimsregion.x, dimsregion.y, norigins), "d_shifttemp.mrc");
 		d_FFTR2C(d_temp, d_tempft, 2, toInt3(dimsregion), norigins);
 		d_RemapHalfFFT2Half(d_tempft, (tcomplex*)d_temp, toInt3(dimsregion), norigins);
-		d_Remap((tcomplex*)d_temp, d_mask, d_dense, masklength, ElementsFFT2(dimsregion), make_cuComplex(0.0f, 0.0f), norigins);
+		d_Remap((tcomplex*)d_temp, d_mask, d_outputall + masklength * norigins * z, masklength, ElementsFFT2(dimsregion), make_cuComplex(0.0f, 0.0f), norigins);
 		//d_ComplexNormalize(d_dense, d_dense, masklength * norigins);
-		d_ConvertTFloatTo((tfloat*)d_dense, (half*)(d_outputall + masklength * norigins * z), masklength * norigins * 2);
 	}
 
 	cudaFree(d_dense);
@@ -56,18 +55,18 @@ __declspec(dllexport) void CreateShift(float* d_frame,
 	cudaFree(d_origins);
 }
 
-__declspec(dllexport) void ShiftGetAverage(half2* d_phase, 
-											half2* d_average, 
-											half2* d_shiftfactors,
+__declspec(dllexport) void ShiftGetAverage(float2* d_phase, 
+											float2* d_average, 
+											float2* d_shiftfactors,
 											uint length,  
 											uint probelength,
 											float2* d_shifts, 
 											uint npositions, 
 											uint nframes)
 {
-	half2* d_shiftshalf;
-	cudaMalloc((void**)&d_shiftshalf, npositions * nframes * sizeof(half2));
-	d_ConvertTFloatTo((float*)d_shifts, (half*)d_shiftshalf, npositions * nframes * 2);
+	float2* d_shiftshalf;
+	cudaMalloc((void**)&d_shiftshalf, npositions * nframes * sizeof(float2));
+	d_ConvertTFloatTo((float*)d_shifts, (float*)d_shiftshalf, npositions * nframes * 2);
 	
 	int TpB = tmin(SHIFT_THREADS, NextMultipleOf(length, 32));
 	dim3 grid = dim3((length + TpB - 1) / TpB, npositions, 1);
@@ -91,13 +90,13 @@ __declspec(dllexport) void ShiftGetAverage(half2* d_phase,
 	cudaFree(d_shiftshalf);
 }
 
-__global__ void ShiftGetAverageKernel(half2* d_phase, half2* d_average, half2* d_shiftfactors, half2* d_shifts, uint length, uint probelength, uint npositions, uint nframes)
+__global__ void ShiftGetAverageKernel(float2* d_phase, float2* d_average, float2* d_shiftfactors, float2* d_shifts, uint length, uint probelength, uint npositions, uint nframes)
 {
 	d_phase += blockIdx.y * length;
 	d_average += blockIdx.y * probelength;
 	d_shifts += blockIdx.y;
 
-	__shared__ half2 s_shifts[256];	// 256 frames should be enough for everyone
+	__shared__ float2 s_shifts[256];	// 256 frames should be enough for everyone
 	for (uint i = threadIdx.x; i < nframes; i += blockDim.x)
 		s_shifts[i] = d_shifts[npositions * i];
 	__syncthreads();
@@ -107,31 +106,30 @@ __global__ void ShiftGetAverageKernel(half2* d_phase, half2* d_average, half2* d
 		 id < probelength; 
 		 id += gridDim.x * blockDim.x)
 	{
-		float2 shiftfactors = __half22float2(d_shiftfactors[id]);
+		float2 shiftfactors = d_shiftfactors[id];
 		float2 sum = make_float2(0.0f, 0.0f);
 
 		for (uint frame = 0; frame < nframes; frame++)
 		{
-			float2 shift = __half22float2(s_shifts[frame]);
+			float2 shift = s_shifts[frame];
 			float phase = shiftfactors.x * shift.x + shiftfactors.y * shift.y;
 			float2 change = make_float2(__cosf(phase), __sinf(phase));
 
-			float2 value = __half22float2(d_phase[length * npositions * frame + id]);
+			float2 value = d_phase[length * npositions * frame + id];
 			value = cuCmulf(value, change);
 
 			sum += value;
 		}
 		
-		float normalization = 1.0f / nframes;
-		sum = make_float2(sum.x * normalization, sum.y * normalization);
+		sum /= nframes;
 
-		d_average[id] = __float22half2_rn(sum);
+		d_average[id] = sum;
 	}
 }
 
-__declspec(dllexport) void ShiftGetDiff(half2* d_phase, 
-											half2* d_average, 
-											half2* d_shiftfactors, 
+__declspec(dllexport) void ShiftGetDiff(float2* d_phase, 
+											float2* d_average, 
+											float2* d_shiftfactors, 
 											uint length, 
 											uint probelength,
 											float2* d_shifts,
@@ -139,59 +137,52 @@ __declspec(dllexport) void ShiftGetDiff(half2* d_phase,
 											uint npositions, 
 											uint nframes)
 {
-	half2* d_shiftshalf;
-	cudaMalloc((void**)&d_shiftshalf, npositions * nframes * sizeof(half2));
-	d_ConvertTFloatTo((float*)d_shifts, (half*)d_shiftshalf, npositions * nframes * 2);
-
 	int TpB = tmin(SHIFT_THREADS, NextMultipleOf(probelength, 32));
-	dim3 grid = dim3(tmin(128, (probelength + TpB - 1) / TpB), npositions, nframes);
+	dim3 grid = dim3(npositions, nframes, 1);
 
 	float* d_diff;
 	cudaMalloc((void**)&d_diff, npositions * nframes * grid.x * sizeof(float));
 	float* d_diffreduced;
 	cudaMalloc((void**)&d_diffreduced, npositions * nframes * sizeof(float));
 
-	ShiftGetDiffKernel <<<grid, TpB>>> (d_phase, d_average, d_shiftfactors, length, probelength, d_shiftshalf, d_diff);
+	ShiftGetDiffKernel <<<grid, TpB>>> (d_phase, d_average, d_shiftfactors, length, probelength, d_shifts, d_diff);
 
-	d_SumMonolithic(d_diff, d_diffreduced, grid.x, npositions * nframes);
-	cudaMemcpy(h_diff, d_diffreduced, npositions * nframes * sizeof(float), cudaMemcpyDeviceToHost);
+	//d_SumMonolithic(d_diff, d_diffreduced, grid.x, npositions * nframes);
+	cudaMemcpy(h_diff, d_diff, npositions * nframes * sizeof(float), cudaMemcpyDeviceToHost);
 	
 	cudaFree(d_diffreduced);
 	cudaFree(d_diff);
-	cudaFree(d_shiftshalf);
 }
 
-__global__ void ShiftGetDiffKernel(half2* d_phase, half2* d_average, half2* d_shiftfactors, uint length, uint probelength, half2* d_shifts, float* d_diff)
+__global__ void ShiftGetDiffKernel(float2* d_phase, float2* d_average, float2* d_shiftfactors, uint length, uint probelength, float2* d_shifts, float* d_diff)
 {
 	__shared__ float s_diff[SHIFT_THREADS];
 	s_diff[threadIdx.x] = 0.0f;
 	__shared__ float s_ampsum[SHIFT_THREADS];
 	s_ampsum[threadIdx.x] = 0.0f;
 
-	uint specid = blockIdx.z * gridDim.y + blockIdx.y;
+	uint specid = blockIdx.y * gridDim.x + blockIdx.x;
 	d_phase += specid * length;
-	d_average += blockIdx.y * probelength;
+	d_average += blockIdx.x * probelength;
 
-	float2 shift = __half22float2(d_shifts[specid]);
+	float2 shift = d_shifts[specid];
 	float diffsum = 0.0f;
 	float ampsum = 0.0f;
 
-	for (uint id = blockIdx.x * blockDim.x + threadIdx.x; 
-		 id < probelength; 
-		 id += gridDim.x * blockDim.x)
+	for (uint id = threadIdx.x; id < probelength; id += blockDim.x)
 	{
-		float2 value = __half22float2(d_phase[id]);
-		float2 average = __half22float2(d_average[id]);
+		float2 value = d_phase[id];
+		float2 average = d_average[id];
 
-		float2 shiftfactors = __half22float2(d_shiftfactors[id]);
+		float2 shiftfactors = d_shiftfactors[id];
 
 		float phase = shiftfactors.x * shift.x + shiftfactors.y * shift.y;
 		float2 change = make_float2(__cosf(phase), __sinf(phase));
 
 		value = cuCmulf(value, change);
 
-		float2 valuenorm = value / tmax(1e-5f, sqrt(value.x * value.x + value.y * value.y));
-		float avgamp = tmax(1e-5f, sqrt(average.x * average.x + average.y * average.y));
+		float2 valuenorm = value / tmax(1e-10f, sqrt(value.x * value.x + value.y * value.y));
+		float avgamp = tmax(1e-10f, sqrt(average.x * average.x + average.y * average.y));
 		average /= avgamp;
 
 		float diff = acos(tmax(-1.0f, tmin(valuenorm.x * average.x + valuenorm.y * average.y, 1.0f))) * avgamp;
@@ -212,13 +203,13 @@ __global__ void ShiftGetDiffKernel(half2* d_phase, half2* d_average, half2* d_sh
 			ampsum += s_ampsum[id];
 		}
 
-		d_diff[specid * gridDim.x + blockIdx.x] = diffsum / ampsum;
+		d_diff[specid] = diffsum / ampsum;
 	}
 }
 
-__declspec(dllexport) void ShiftGetGrad(half2* d_phase, 
-										half2* d_average, 
-										half2* d_shiftfactors, 
+__declspec(dllexport) void ShiftGetGrad(float2* d_phase, 
+										float2* d_average, 
+										float2* d_shiftfactors, 
 										uint length, 
 										uint probelength,
 										float2* d_shifts,
@@ -226,37 +217,32 @@ __declspec(dllexport) void ShiftGetGrad(half2* d_phase,
 										uint npositions, 
 										uint nframes)
 {
-	half2* d_shiftshalf;
-	cudaMalloc((void**)&d_shiftshalf, npositions * nframes * sizeof(half2));
-	d_ConvertTFloatTo((float*)d_shifts, (half*)d_shiftshalf, npositions * nframes * 2);
-
 	int TpB = tmin(SHIFT_THREADS, NextMultipleOf(probelength, 32));
-	dim3 grid = dim3(tmin(128, (probelength + TpB - 1) / TpB), npositions, nframes);
+	dim3 grid = dim3(npositions, nframes, 1);
 
 	float2* d_grad;
 	cudaMalloc((void**)&d_grad, npositions * nframes * grid.x * sizeof(float2));
 	float2* d_gradreduced;
 	cudaMalloc((void**)&d_gradreduced, npositions * nframes * sizeof(float2));
 
-	ShiftGetGradKernel <<<grid, TpB>>> (d_phase, d_average, d_shiftfactors, length, probelength, d_shiftshalf, d_grad);
+	ShiftGetGradKernel <<<grid, TpB>>> (d_phase, d_average, d_shiftfactors, length, probelength, d_shifts, d_grad);
 
 	float2* h_grad2 = (float2*)MallocFromDeviceArray(d_grad, npositions * nframes * grid.x * sizeof(float2));
 	free(h_grad2);
 
-	d_SumMonolithic(d_grad, d_gradreduced, grid.x, npositions * nframes);
-	cudaMemcpy(h_grad, d_gradreduced, npositions * nframes * sizeof(float2), cudaMemcpyDeviceToHost);
+	//d_SumMonolithic(d_grad, d_gradreduced, grid.x, npositions * nframes);
+	cudaMemcpy(h_grad, d_grad, npositions * nframes * sizeof(float2), cudaMemcpyDeviceToHost);
 	
 	cudaFree(d_gradreduced);
 	cudaFree(d_grad);
-	cudaFree(d_shiftshalf);
 }
 
-__global__ void ShiftGetGradKernel(half2* d_phase, 
-									half2* d_average, 
-									half2* d_shiftfactors, 
+__global__ void ShiftGetGradKernel(float2* d_phase, 
+									float2* d_average, 
+									float2* d_shiftfactors, 
 									uint length, 
 									uint probelength, 
-									half2* d_shifts, 
+									float2* d_shifts, 
 									float2* d_grad)
 {
 	__shared__ float2 s_grad[SHIFT_THREADS];
@@ -264,23 +250,21 @@ __global__ void ShiftGetGradKernel(half2* d_phase,
 	__shared__ float s_ampsum[SHIFT_THREADS];
 	s_ampsum[threadIdx.x] = 0.0f;
 
-	uint specid = blockIdx.z * gridDim.y + blockIdx.y;
+	uint specid = blockIdx.y * gridDim.x + blockIdx.x;
 	d_phase += specid * length;
-	d_average += blockIdx.y * probelength;
+	d_average += blockIdx.x * probelength;
 
-	float2 shift = __half22float2(d_shifts[specid]);
+	float2 shift = d_shifts[specid];
 	float2 gradsum = make_float2(0.0f, 0.0f);
 	float ampsum = 0.0f;
 
-	for (uint id = blockIdx.x * blockDim.x + threadIdx.x; 
-		 id < probelength; 
-		 id += gridDim.x * blockDim.x)
+	for (uint id = threadIdx.x; id < probelength; id += blockDim.x)
 	{
-		float2 value = __half22float2(d_phase[id]);
-		float2 average = __half22float2(d_average[id]);
+		float2 value = d_phase[id];
+		float2 average = d_average[id];
 
-		float2 shiftfactors = __half22float2(d_shiftfactors[id]);
-		float weight = tmax(1e-5f, sqrt(average.x * average.x + average.y * average.y));// __half2float(d_weights[id]);
+		float2 shiftfactors = d_shiftfactors[id];
+		float weight = tmax(1e-10f, sqrt(average.x * average.x + average.y * average.y));// __half2float(d_weights[id]);
 
 		float phase = shiftfactors.x * shift.x + shiftfactors.y * shift.y;
 		float2 change = make_float2(__cosf(phase), __sinf(phase));
@@ -303,11 +287,11 @@ __global__ void ShiftGetGradKernel(half2* d_phase,
 			ampsum = ampsum + s_ampsum[id];
 		}
 
-		d_grad[specid * gridDim.x + blockIdx.x] = gradsum / ampsum;
+		d_grad[specid] = gradsum / ampsum;
 	}
 }
 
 __declspec(dllexport) void CreateMotionBlur(float* d_output, int3 dims, float* h_shifts, uint nshifts, uint batch)
 {
-    d_MotionBlur(d_output, dims, (tfloat3*)h_shifts, nshifts, false, batch);
+    d_MotionBlur(d_output, dims, (float3*)h_shifts, nshifts, false, batch);
 }

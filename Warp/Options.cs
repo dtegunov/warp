@@ -42,6 +42,7 @@ namespace Warp
                     InputExtensionMRC = value == "*.mrc";
                     InputExtensionMRCS = value == "*.mrcs";
                     InputExtensionEM = value == "*.em";
+                    InputExtensionTIFF = value == "*.tif";
                     InputExtensionDAT = value == "*.dat";
                 }
             }
@@ -88,6 +89,36 @@ namespace Warp
                     _InputExtensionEM = value; OnPropertyChanged();
                     if (value)
                         InputExtension = "*.em";
+                }
+            }
+        }
+
+        private bool _InputExtensionTIFF = false;
+        public bool InputExtensionTIFF
+        {
+            get { return _InputExtensionTIFF; }
+            set
+            {
+                if (value != _InputExtensionTIFF)
+                {
+                    _InputExtensionTIFF = value; OnPropertyChanged();
+                    if (value)
+                        InputExtension = "*.tif";
+                }
+            }
+        }
+
+        private bool _InputExtensionALI = false;
+        public bool InputExtensionALI
+        {
+            get { return _InputExtensionALI; }
+            set
+            {
+                if (value != _InputExtensionALI)
+                {
+                    _InputExtensionALI = value; OnPropertyChanged();
+                    if (value)
+                        InputExtension = "*.ali";
                 }
             }
         }
@@ -328,31 +359,69 @@ namespace Warp
             }
         }
 
-        private bool _CorrectDoseWeighting = true;
+        #endregion
 
-        public bool CorrectDoseWeighting
+        #region Use particles
+
+        private string _DataStarPath = "";
+        public string DataStarPath
         {
-            get { return _CorrectDoseWeighting; }
-            set
-            {
-                if (value != _CorrectDoseWeighting)
-                {
-                    _CorrectDoseWeighting = value;
-                    OnPropertyChanged();
-                }
-            }
+            get { return _DataStarPath; }
+            set { if (value != _DataStarPath) { _DataStarPath = value; OnPropertyChanged(); } }
         }
 
-        private decimal _CorrectDosePerFrame = 1.0M;
-        public decimal CorrectDosePerFrame
+        private string _ModelStarPath = "";
+        public string ModelStarPath
         {
-            get { return _CorrectDosePerFrame; }
-            set { if (value != _CorrectDosePerFrame) { _CorrectDosePerFrame = value; OnPropertyChanged(); } }
+            get { return _ModelStarPath; }
+            set { if (value != _ModelStarPath) { _ModelStarPath = value; OnPropertyChanged(); } }
+        }
+
+        private string _ReferencePath = "";
+        public string ReferencePath
+        {
+            get { return _ReferencePath; }
+            set { if (value != _ReferencePath) { _ReferencePath = value; OnPropertyChanged(); } }
+        }
+
+        private string _MaskPath = "";
+        public string MaskPath
+        {
+            get { return _MaskPath; }
+            set { if (value != _MaskPath) { _MaskPath = value; OnPropertyChanged(); } }
+        }
+
+        private int _ProjectionOversample = 2;
+        public int ProjectionOversample
+        {
+            get { return _ProjectionOversample; }
+            set { if (value != _ProjectionOversample) { _ProjectionOversample = value; OnPropertyChanged(); } }
+        }
+
+        private int _ExportParticleSize = 256;
+        public int ExportParticleSize
+        {
+            get { return _ExportParticleSize; }
+            set { if (value != _ExportParticleSize) { _ExportParticleSize = value; OnPropertyChanged(); } }
+        }
+
+        private int _ExportParticleRadius = 100;
+        public int ExportParticleRadius
+        {
+            get { return _ExportParticleRadius; }
+            set { if (value != _ExportParticleRadius) { _ExportParticleRadius = value; OnPropertyChanged(); } }
         }
 
         #endregion
 
         #region CTF
+
+        private bool _ProcessCTF = true;
+        public bool ProcessCTF
+        {
+            get { return _ProcessCTF; }
+            set { if (value != _ProcessCTF) { _ProcessCTF = value; OnPropertyChanged(); } }
+        }
 
         private int _CTFWindow = 512;
 
@@ -506,6 +575,13 @@ namespace Warp
             }
         }
 
+        private decimal _CTFDetectorPixel = 5M;
+        public decimal CTFDetectorPixel
+        {
+            get { return _CTFDetectorPixel; }
+            set { if (value != _CTFDetectorPixel) { _CTFDetectorPixel = value; OnPropertyChanged(); } }
+        }
+
         private bool _CTFDoPhase = true;
         public bool CTFDoPhase
         {
@@ -573,9 +649,23 @@ namespace Warp
             }
         }
 
+        private bool _ProcessParticleCTF = false;
+        public bool ProcessParticleCTF
+        {
+            get { return _ProcessParticleCTF; }
+            set { if (value != _ProcessParticleCTF) { _ProcessParticleCTF = value; OnPropertyChanged(); } }
+        }
+
         #endregion
 
         #region Movement
+
+        private bool _ProcessMovement = true;
+        public bool ProcessMovement
+        {
+            get { return _ProcessMovement; }
+            set { if (value != _ProcessMovement) { _ProcessMovement = value; OnPropertyChanged(); } }
+        }
 
         private decimal _MovementRangeMin = 0.002M;
 
@@ -605,6 +695,20 @@ namespace Warp
                     OnPropertyChanged();
                 }
             }
+        }
+
+        private decimal _MovementBfactor = 0;
+        public decimal MovementBfactor
+        {
+            get { return _MovementBfactor; }
+            set { if (value != _MovementBfactor) { _MovementBfactor = value; OnPropertyChanged(); } }
+        }
+
+        private bool _ProcessParticleShift = false;
+        public bool ProcessParticleShift
+        {
+            get { return _ProcessParticleShift; }
+            set { if (value != _ProcessParticleShift) { _ProcessParticleShift = value; OnPropertyChanged(); } }
         }
 
         #endregion
@@ -706,7 +810,6 @@ namespace Warp
         #region Postprocessing
 
         private decimal _PostBinTimes = 0;
-
         public decimal PostBinTimes
         {
             get { return _PostBinTimes; }
@@ -722,7 +825,6 @@ namespace Warp
         }
 
         private bool _PostAverage = true;
-
         public bool PostAverage
         {
             get { return _PostAverage; }
@@ -737,7 +839,6 @@ namespace Warp
         }
 
         private bool _PostStack = false;
-
         public bool PostStack
         {
             get { return _PostStack; }
@@ -752,7 +853,6 @@ namespace Warp
         }
 
         private int _PostStackGroupSize = 1;
-
         public int PostStackGroupSize
         {
             get { return _PostStackGroupSize; }
@@ -818,6 +918,21 @@ namespace Warp
             BinnedPixelSize = Pixelsize * (decimal)Math.Pow(2.0, (double) PostBinTimes);
         }
 
+        private string _GPUStats = "";
+        public string GPUStats
+        {
+            get { return _GPUStats; }
+            set { if (value != _GPUStats) { _GPUStats = value; OnPropertyChanged(); } }
+        }
+        public void UpdateGPUStats()
+        {
+            int NDevices = GPU.GetDeviceCount();
+            string[] Stats = new string[NDevices];
+            for (int i = 0; i < NDevices; i++)
+                Stats[i] = "GPU" + i + ": " + GPU.GetFreeMemory(i) + " MB";
+            GPUStats = string.Join(", ", Stats);
+        }
+
         #endregion
 
         public void Save(string path)
@@ -844,9 +959,16 @@ namespace Warp
             XMLHelper.WriteParamNode(Writer, "GainPath", GainPath);
             XMLHelper.WriteParamNode(Writer, "CorrectGain", CorrectGain);
             XMLHelper.WriteParamNode(Writer, "CorrectBlackRectangles", CorrectBlackRectangles);
-            XMLHelper.WriteParamNode(Writer, "CorrectDoseWeighting", CorrectDoseWeighting);
-            XMLHelper.WriteParamNode(Writer, "CorrectDosePerFrame", CorrectDosePerFrame);
 
+            XMLHelper.WriteParamNode(Writer, "DataStarPath", DataStarPath);
+            XMLHelper.WriteParamNode(Writer, "ModelStarPath", ModelStarPath);
+            XMLHelper.WriteParamNode(Writer, "ReferencePath", ReferencePath);
+            XMLHelper.WriteParamNode(Writer, "MaskPath", MaskPath);
+            XMLHelper.WriteParamNode(Writer, "ProjectionOversample", ProjectionOversample);
+            XMLHelper.WriteParamNode(Writer, "ExportParticleSize", ExportParticleSize);
+            XMLHelper.WriteParamNode(Writer, "ExportParticleRadius", ExportParticleRadius);
+
+            XMLHelper.WriteParamNode(Writer, "ProcessCTF", ProcessCTF);
             XMLHelper.WriteParamNode(Writer, "CTFWindow", CTFWindow);
             XMLHelper.WriteParamNode(Writer, "CTFRangeMin", CTFRangeMin);
             XMLHelper.WriteParamNode(Writer, "CTFRangeMax", CTFRangeMax);
@@ -857,14 +979,19 @@ namespace Warp
             XMLHelper.WriteParamNode(Writer, "CTFPixelMin", CTFPixelMin);
             XMLHelper.WriteParamNode(Writer, "CTFPixelMax", CTFPixelMax);
             XMLHelper.WriteParamNode(Writer, "CTFPixelAngle", CTFPixelAngle);
+            XMLHelper.WriteParamNode(Writer, "CTFDetectorPixel", CTFDetectorPixel);
             XMLHelper.WriteParamNode(Writer, "CTFDoPhase", CTFDoPhase);
             XMLHelper.WriteParamNode(Writer, "CTFAstigmatism", CTFAstigmatism);
             XMLHelper.WriteParamNode(Writer, "CTFAstigmatismAngle", CTFAstigmatismAngle);
             XMLHelper.WriteParamNode(Writer, "CTFZMin", CTFZMin);
             XMLHelper.WriteParamNode(Writer, "CTFZMax", CTFZMax);
+            XMLHelper.WriteParamNode(Writer, "ProcessParticleCTF", ProcessParticleCTF);
 
+            XMLHelper.WriteParamNode(Writer, "ProcessMovement", ProcessMovement);
             XMLHelper.WriteParamNode(Writer, "MovementRangeMin", MovementRangeMin);
             XMLHelper.WriteParamNode(Writer, "MovementRangeMax", MovementRangeMax);
+            XMLHelper.WriteParamNode(Writer, "MovementBfactor", MovementBfactor);
+            XMLHelper.WriteParamNode(Writer, "ProcessParticleShift", ProcessParticleShift);
 
             XMLHelper.WriteParamNode(Writer, "GridCTFX", GridCTFX);
             XMLHelper.WriteParamNode(Writer, "GridCTFY", GridCTFY);
@@ -907,9 +1034,16 @@ namespace Warp
                 GainPath = XMLHelper.LoadParamNode(Reader, "GainPath", "");
                 CorrectGain = XMLHelper.LoadParamNode(Reader, "CorrectGain", false);
                 CorrectBlackRectangles = XMLHelper.LoadParamNode(Reader, "CorrectBlackRectangles", true);
-                CorrectDoseWeighting = XMLHelper.LoadParamNode(Reader, "CorrectDoseWeighting", true);
-                CorrectDosePerFrame = XMLHelper.LoadParamNode(Reader, "CorrectDosePerFrame", 1M);
 
+                DataStarPath = XMLHelper.LoadParamNode(Reader, "DataStarPath", "");
+                ModelStarPath = XMLHelper.LoadParamNode(Reader, "ModelStarPath", "");
+                ReferencePath = XMLHelper.LoadParamNode(Reader, "ReferencePath", "");
+                MaskPath = XMLHelper.LoadParamNode(Reader, "MaskPath", "");
+                ProjectionOversample = XMLHelper.LoadParamNode(Reader, "ProjectionOversample", ProjectionOversample);
+                ExportParticleSize = XMLHelper.LoadParamNode(Reader, "ExportParticleSize", ExportParticleSize);
+                ExportParticleRadius = XMLHelper.LoadParamNode(Reader, "ExportParticleRadius", ExportParticleRadius);
+
+                ProcessCTF = XMLHelper.LoadParamNode(Reader, "ProcessCTF", ProcessCTF);
                 CTFWindow = XMLHelper.LoadParamNode(Reader, "CTFWindow", CTFWindow);
                 CTFRangeMin = XMLHelper.LoadParamNode(Reader, "CTFRangeMin", CTFRangeMin);
                 CTFRangeMax = XMLHelper.LoadParamNode(Reader, "CTFRangeMax", CTFRangeMax);
@@ -920,14 +1054,19 @@ namespace Warp
                 CTFPixelMin = XMLHelper.LoadParamNode(Reader, "CTFPixelMin", CTFPixelMin);
                 CTFPixelMax = XMLHelper.LoadParamNode(Reader, "CTFPixelMax", CTFPixelMax);
                 CTFPixelAngle = XMLHelper.LoadParamNode(Reader, "CTFPixelAngle", CTFPixelAngle);
+                CTFDetectorPixel = XMLHelper.LoadParamNode(Reader, "CTFDetectorPixel", CTFDetectorPixel);
                 CTFDoPhase = XMLHelper.LoadParamNode(Reader, "CTFDoPhase", CTFDoPhase);
                 CTFAstigmatism = XMLHelper.LoadParamNode(Reader, "CTFAstigmatism", CTFAstigmatism);
                 CTFAstigmatismAngle = XMLHelper.LoadParamNode(Reader, "CTFAstigmatismAngle", CTFAstigmatismAngle);
                 CTFZMin = XMLHelper.LoadParamNode(Reader, "CTFZMin", CTFZMin);
                 CTFZMax = XMLHelper.LoadParamNode(Reader, "CTFZMax", CTFZMax);
+                ProcessParticleCTF = XMLHelper.LoadParamNode(Reader, "ProcessParticleCTF", ProcessParticleCTF);
 
+                ProcessMovement = XMLHelper.LoadParamNode(Reader, "ProcessMovement", ProcessMovement);
                 MovementRangeMin = XMLHelper.LoadParamNode(Reader, "MovementRangeMin", MovementRangeMin);
                 MovementRangeMax = XMLHelper.LoadParamNode(Reader, "MovementRangeMax", MovementRangeMax);
+                MovementBfactor = XMLHelper.LoadParamNode(Reader, "MovementBfactor", MovementBfactor);
+                ProcessParticleShift = XMLHelper.LoadParamNode(Reader, "ProcessParticleShift", ProcessParticleShift);
 
                 GridCTFX = XMLHelper.LoadParamNode(Reader, "GridCTFX", GridCTFX);
                 GridCTFY = XMLHelper.LoadParamNode(Reader, "GridCTFY", GridCTFY);

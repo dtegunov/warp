@@ -7,12 +7,17 @@ __declspec(dllexport) void GetMotionFilter(float* d_output, int3 dims, float3* h
 	tcomplex* d_meanphases;
 	cudaMalloc((void**)&d_meanphases, ElementsFFT2(dims) * batch * sizeof(tcomplex));
 	
-	d_Shift(d_phases, d_phases, dims, (tfloat3*)h_shifts, true, nshifts * batch);
+	d_Shift(d_phases, d_phases, dims, (tfloat3*)h_shifts, false, nshifts * batch);
 	d_ReduceMean(d_phases, d_meanphases, ElementsFFT2(dims), nshifts, batch);
 	d_Abs(d_meanphases, d_output, ElementsFFT2(dims) * batch);
 
 	cudaFree(d_meanphases);
 	cudaFree(d_phases);
+}
+
+__declspec(dllexport) void CorrectMagAnisotropy(float* d_image, int2 dimsimage, float* d_scaled, int2 dimsscaled, float majorpixel, float minorpixel, float majorangle, uint supersample, uint batch)
+{
+	d_MagAnisotropyCorrect(d_image, dimsimage, d_scaled, dimsscaled, majorpixel, minorpixel, majorangle, supersample, batch);
 }
 
 __declspec(dllexport) void WeightedFrameSum(float* d_frames, 
@@ -60,4 +65,9 @@ __declspec(dllexport) void DoseWeighting(float* d_freq,
 										uint batch)
 {
     d_DoseFilter(d_freq, d_output, length, h_dose, nikoconst, batch);
+}
+
+__declspec(dllexport) void NormParticles(float* d_input, float* d_output, int3 dims, uint particleradius, bool flipsign, uint batch)
+{
+    d_NormBackground(d_input, d_output, dims, particleradius, flipsign, batch);
 }

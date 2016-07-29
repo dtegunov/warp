@@ -43,7 +43,10 @@ namespace Warp
             get
             {
                 if (_DeviceData == IntPtr.Zero)
+                {
                     _DeviceData = !IsHalf ? GPU.MallocDevice(ElementsReal) : GPU.MallocDeviceHalf(ElementsReal);
+                    MainWindow.Options.UpdateGPUStats();
+                }
 
                 return _DeviceData;
             }
@@ -158,6 +161,7 @@ namespace Warp
             IsHalf = ishalf;
 
             _DeviceData = !IsHalf ? GPU.MallocDevice(ElementsReal) : GPU.MallocDeviceHalf(ElementsReal);
+            MainWindow.Options.UpdateGPUStats();
             if (deviceData != IntPtr.Zero)
             {
                 if (!IsHalf)
@@ -188,6 +192,14 @@ namespace Warp
 
                 return DeviceData;
             }
+        }
+
+        public IntPtr GetDeviceSlice(int slice, Intent intent)
+        {
+            IntPtr Start = GetDevice(intent);
+            Start = new IntPtr((long)Start + slice * ElementsSliceReal * (IsHalf ? sizeof(short) : sizeof (float)));
+
+            return Start;
         }
 
         public float[][] GetHost(Intent intent)
@@ -267,6 +279,7 @@ namespace Warp
                             else
                                 GPU.CopyDeviceHalfToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(short)), HostData[z], ElementsSliceReal);
                     GPU.FreeDevice(DeviceData);
+                    MainWindow.Options.UpdateGPUStats();
                     _DeviceData = IntPtr.Zero;
                     IsDeviceDirty = false;
                 }
@@ -284,11 +297,16 @@ namespace Warp
 
             float[][] Data = GetHost(Intent.Read);
             float Min = float.MaxValue, Max = -float.MaxValue;
-            for (int z = 0; z < Data.Length; z++)
+            Parallel.For(0, Data.Length, z =>
             {
-                Min = Math.Min(MathHelper.Min(Data[z]), Min);
-                Max = Math.Max(MathHelper.Max(Data[z]), Max);
-            }
+                float LocalMin = MathHelper.Min(Data[z]);
+                float LocalMax = MathHelper.Max(Data[z]);
+                lock (Data)
+                {
+                    Min = Math.Min(LocalMin, Min);
+                    Max = Math.Max(LocalMax, Max);
+                }
+            });
             header.MinValue = Min;
             header.MaxValue = Max;
 
@@ -302,6 +320,7 @@ namespace Warp
                 if (_DeviceData != IntPtr.Zero)
                 {
                     GPU.FreeDevice(_DeviceData);
+                    MainWindow.Options.UpdateGPUStats();
                     _DeviceData = IntPtr.Zero;
                     IsDeviceDirty = false;
                 }
@@ -335,10 +354,12 @@ namespace Warp
             if (IsHalf)
             {
                 IntPtr Temp = GPU.MallocDevice(ElementsReal);
+                MainWindow.Options.UpdateGPUStats();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Temp, ElementsReal);
 
                 Result = new Image(Temp, Dims, IsFT, IsComplex, false);
                 GPU.FreeDevice(Temp);
+                MainWindow.Options.UpdateGPUStats();
             }
             else
             {
@@ -418,24 +439,54 @@ namespace Warp
             return Padded;
         }
 
-        public Image AsFFT()
+        public Image AsPadded(int3 dimensions)
+        {
+            if (IsHalf)
+                throw new Exception("Half precision not supported for padding.");
+
+            if (IsComplex != IsFT)
+                throw new Exception("FT format can only have complex data for padding purposes.");
+
+            if (IsFT && Dims < dimensions == Dims > dimensions)
+                throw new Exception("For FT padding/cropping, both dimensions must be either smaller, or bigger.");
+
+            Image Padded = null;
+
+            if (!IsComplex && !IsFT)
+            {
+                Padded = new Image(IntPtr.Zero, dimensions, false, false, false);
+                GPU.Pad(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims, dimensions, 1);
+            }
+            else if (IsComplex && IsFT)
+            {
+                Padded = new Image(IntPtr.Zero, dimensions, true, true, false);
+                if (dimensions > Dims)
+                    GPU.PadFT(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims, dimensions, 1);
+                else
+                    GPU.CropFT(GetDevice(Intent.Read), Padded.GetDevice(Intent.Write), Dims, dimensions, 1);
+            }
+
+            return Padded;
+        }
+
+        public Image AsFFT(bool isvolume = false)
         {
             if (IsHalf || IsComplex || IsFT)
                 throw new Exception("Data format not supported.");
 
             Image FFT = new Image(IntPtr.Zero, Dims, true, true, false);
-            GPU.FFT(GetDevice(Intent.Read), FFT.GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            GPU.FFT(GetDevice(Intent.Read), FFT.GetDevice(Intent.Write), isvolume ? Dims : Dims.Slice(), isvolume ? 1 : (uint)Dims.Z);
 
             return FFT;
         }
 
-        public Image AsIFFT()
+        public Image AsIFFT(bool isvolume = false)
         {
             if (IsHalf || !IsComplex || !IsFT)
                 throw new Exception("Data format not supported.");
 
             Image IFFT = new Image(IntPtr.Zero, Dims, false, false, false);
-            GPU.IFFT(GetDevice(Intent.Read), IFFT.GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            GPU.IFFT(GetDevice(Intent.Read), IFFT.GetDevice(Intent.Write), isvolume ? Dims : Dims.Slice(), isvolume ? 1 : (uint)Dims.Z);
 
             return IFFT;
         }
@@ -559,26 +610,98 @@ namespace Warp
             return new Image(Imaginary, Dims, IsFT, false, IsHalf);
         }
 
-        public void RemapToFT()
+        public Image AsScaledMassive(int2 newSliceDims)
         {
-            if (!IsFT)
-                throw new Exception("Remap only supported for FT layout.");
+            int3 Scaled = new int3(newSliceDims.X, newSliceDims.Y, Dims.Z);
+            Image Output = new Image(Scaled);
+            IntPtr OutputDevice = Output.GetDevice(Intent.Write);
 
-            if (IsComplex)
-                GPU.RemapToFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
-            else
-                GPU.RemapToFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            float[][] OriginalHost = GetHost(Intent.Read);
+            for (int z = 0; z < Dims.Z; z++)
+            {
+                Image Slice = new Image(OriginalHost[z]);
+                GPU.Scale(Slice.GetDevice(Intent.Read),
+                          new IntPtr((long)OutputDevice + newSliceDims.Elements() * sizeof(float) * z),
+                          new int3(DimsSlice),
+                          new int3(newSliceDims), 
+                          1);
+                Slice.Dispose();
+            }
+
+            return Output;
         }
 
-        public void RemapFromFT()
+        public Image AsProjections(float3[] angles, int2 dimsprojection, float supersample)
         {
-            if (!IsFT)
-                throw new Exception("Remap only supported for FT layout.");
+            if (Dims.X != Dims.Y || Dims.Y != Dims.Z)
+                throw new Exception("Volume must be a cube.");
+
+            Image Projections = new Image(IntPtr.Zero, new int3(dimsprojection.X, dimsprojection.Y, angles.Length), true, true);
+
+            GPU.ProjectForward(GetDevice(Intent.Read),
+                               Projections.GetDevice(Intent.Write),
+                               Dims,
+                               dimsprojection,
+                               Helper.ToInterleaved(angles),
+                               supersample,
+                               (uint)angles.Length);
+
+            return Projections;
+        }
+
+        public Image AsAnisotropyCorrected(int2 dimsscaled, float majorpixel, float minorpixel, float majorangle, uint supersample)
+        {
+            Image Corrected = new Image(IntPtr.Zero, new int3(dimsscaled.X, dimsscaled.Y, Dims.Z));
+
+            GPU.CorrectMagAnisotropy(GetDevice(Intent.Read),
+                                     DimsSlice,
+                                     Corrected.GetDevice(Intent.Write),
+                                     dimsscaled,
+                                     majorpixel,
+                                     minorpixel,
+                                     majorangle,
+                                     supersample,
+                                     (uint)Dims.Z);
+
+            return Corrected;
+        }
+
+        public void RemapToFT(bool isvolume = false)
+        {
+            if (!IsFT && IsComplex)
+                throw new Exception("Complex remap only supported for FT layout.");
+
+            int3 WorkDims = isvolume ? Dims : Dims.Slice();
+            uint WorkBatch = isvolume ? 1 : (uint)Dims.Z;
 
             if (IsComplex)
-                GPU.RemapFromFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+                GPU.RemapToFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
             else
-                GPU.RemapFromFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), Dims.Slice(), (uint)Dims.Z);
+            {
+                if (IsFT)
+                    GPU.RemapToFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
+                else
+                    GPU.RemapFullToFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
+            }
+        }
+
+        public void RemapFromFT(bool isvolume = false)
+        {
+            if (!IsFT && IsComplex)
+                throw new Exception("Complex remap only supported for FT layout.");
+
+            int3 WorkDims = isvolume ? Dims : Dims.Slice();
+            uint WorkBatch = isvolume ? 1 : (uint)Dims.Z;
+
+            if (IsComplex)
+                GPU.RemapFromFTComplex(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
+            else
+            {
+                if (IsFT)
+                    GPU.RemapFromFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
+                else
+                    GPU.RemapFullFromFTFloat(GetDevice(Intent.Read), GetDevice(Intent.Write), WorkDims, WorkBatch);
+            }
         }
 
         public void Xray(float ndevs)
@@ -586,7 +709,12 @@ namespace Warp
             if (IsComplex || IsHalf)
                 throw new Exception("Complex and half are not supported.");
 
-            GPU.Xray(GetDevice(Intent.Read), GetDevice(Intent.Write), ndevs, new int2(DimsEffective), (uint)Dims.Z);
+            for (int i = 0; i < Dims.Z; i++)
+                GPU.Xray(new IntPtr((long)GetDevice(Intent.Read) + DimsEffective.ElementsSlice() * i * sizeof (float)),
+                         new IntPtr((long)GetDevice(Intent.Write) + DimsEffective.ElementsSlice() * i * sizeof(float)),
+                         ndevs,
+                         new int2(DimsEffective),
+                         1);
         }
 
         public void Fill(float val)
@@ -603,6 +731,14 @@ namespace Warp
                 throw new Exception("Does not work for fp16.");
 
             GPU.Sign(GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
+        }
+
+        public void Abs()
+        {
+            if (IsHalf)
+                throw new Exception("Does not work for fp16.");
+
+            GPU.Abs(GetDevice(Intent.Read), GetDevice(Intent.Write), ElementsReal);
         }
 
         private void Add(Image summands, uint elements, uint batch)
@@ -822,15 +958,51 @@ namespace Warp
             else
             {
                 Data = GPU.MallocDevice(ElementsReal);
+                MainWindow.Options.UpdateGPUStats();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
-
-            GPU.ShiftStack(Data, Data, DimsEffective.Slice(), Helper.ToInterleaved(shifts), (uint)Dims.Z);
+            
+            GPU.ShiftStack(Data,
+                            Data,
+                            DimsEffective.Slice(),
+                            Helper.ToInterleaved(shifts), 
+                            (uint)Dims.Z);
 
             if (IsHalf)
             {
                 GPU.SingleToHalf(Data, GetDevice(Intent.Write), ElementsReal);
                 GPU.FreeDevice(Data);
+                MainWindow.Options.UpdateGPUStats();
+            }
+        }
+
+        public void ShiftSlicesMassive(float3[] shifts)
+        {
+            if (IsComplex)
+                throw new Exception("Cannot shift complex image.");
+
+            IntPtr Data;
+            if (!IsHalf)
+                Data = GetDevice(Intent.ReadWrite);
+            else
+            {
+                Data = GPU.MallocDevice(ElementsReal);
+                MainWindow.Options.UpdateGPUStats();
+                GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
+            }
+
+            for (int b = 0; b < Dims.Z; b++)
+                GPU.ShiftStack(new IntPtr((long)Data + ElementsSliceReal * b * sizeof(float)),
+                               new IntPtr((long)Data + ElementsSliceReal * b * sizeof(float)),
+                               DimsEffective.Slice(),
+                               new[] { shifts[b].X, shifts[b].Y, shifts[b].Z },
+                               1);
+
+            if (IsHalf)
+            {
+                GPU.SingleToHalf(Data, GetDevice(Intent.Write), ElementsReal);
+                GPU.FreeDevice(Data);
+                MainWindow.Options.UpdateGPUStats();
             }
         }
     }

@@ -20,17 +20,20 @@ namespace Warp.Stages
             }
         }
 
-        public static Image LoadMap(string path, int2 headerlessSliceDims, long headerlessOffset, Type headerlessType)
+        public static Image LoadMap(string path, int2 headerlessSliceDims, long headerlessOffset, Type headerlessType, int layer = -1)
         {
-            MapHeader Header = LoadHeader(path, headerlessSliceDims, headerlessOffset, headerlessType);
-            float[][] Data;
-
             lock (Sync)
             {
-                Data = IOHelper.ReadMapFloat(path, headerlessSliceDims, headerlessOffset, headerlessType);
-            }
+                MapHeader Header = LoadHeader(path, headerlessSliceDims, headerlessOffset, headerlessType);
+                float[][] Data;
 
-            return new Image(Data, Header.Dimensions, false, false);
+                    Data = IOHelper.ReadMapFloat(path, headerlessSliceDims, headerlessOffset, headerlessType, layer);
+
+                return new Image(Data,
+                                 new int3(Header.Dimensions.X, Header.Dimensions.Y, layer < 0 ? Header.Dimensions.Z : 1),
+                                 false,
+                                 false);
+            }
         }
     }
 }

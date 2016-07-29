@@ -80,6 +80,80 @@ __declspec(dllexport) void __stdcall CubicInterpOnGrid(int3 dimensions, float* v
 			}
 }
 
+__declspec(dllexport) void __stdcall CubicInterpIrregular(int3 dimensions, float* values, float3* positions, int npositions, float3 spacing, float* output)
+{
+#pragma omp parallel for
+    for (int position = 0; position < npositions; position++)
+    {
+        float3 coords = positions[position];
+
+        {
+            coords = make_float3(coords.x / spacing.x, coords.y / spacing.y, coords.z / spacing.z);  // from [0, 1] to [0, dim - 1]
+
+            float3 coord_grid = coords;
+            float3 index = make_float3(floor(coord_grid.x), floor(coord_grid.y), floor(coord_grid.z));
+
+            float result = 0.0f;
+
+            int MinX = tmax(0, (int)index.x - 1), MaxX = tmin((int)index.x + 2, dimensions.x - 1);
+            int MinY = tmax(0, (int)index.y - 1), MaxY = tmin((int)index.y + 2, dimensions.y - 1);
+            int MinZ = tmax(0, (int)index.z - 1), MaxZ = tmin((int)index.z + 2, dimensions.z - 1);
+
+            int nz = MaxZ - MinZ + 1;
+            int ny = MaxY - MinY + 1;
+            int nx = MaxX - MinX + 1;
+
+            float InterpX[16];
+            for (int z = MinZ; z <= MaxZ; z++)
+            {
+                for (int y = MinY; y <= MaxY; y++)
+                {
+                    float2 Points[4];
+                    if (nx == 1)
+                        InterpX[(z - MinZ) * ny + y - MinY] = values[(z * dimensions.y + y) * 1];
+                    else
+                    {
+                        for (int x = MinX; x <= MaxX; x++)
+                            Points[x - MinX] = make_float2(x, values[(z * dimensions.y + y) * dimensions.x + x]);
+
+                        InterpX[(z - MinZ) * ny + y - MinY] = CubicInterpShort(Points, coords.x, nx);
+                    }
+                }
+            }
+
+            float InterpXY[4];
+            for (int z = MinZ; z <= MaxZ; z++)
+            {
+                float2 Points[4];
+                if (ny == 1)
+                    InterpXY[z - MinZ] = InterpX[(z - MinZ) * ny];
+                else
+                {
+                    for (int y = MinY; y <= MaxY; y++)
+                        Points[y - MinY] = make_float2(y, InterpX[(z - MinZ) * ny + y - MinY]);
+
+                    InterpXY[z - MinZ] = CubicInterpShort(Points, coords.y, ny);
+                }
+            }
+
+            {
+                float2 Points[4];
+                if (nz == 1)
+                    result = InterpXY[0];
+                else
+                {
+                    for (int z = MinZ; z <= MaxZ; z++)
+                        Points[z - MinZ] = make_float2(z, InterpXY[z - MinZ]);
+
+                    result = CubicInterpShort(Points, coords.z, nz);
+                }
+            }
+
+            output[position] = result;
+        }
+    }
+}
+
 float CubicInterpShort(float2* data, float x, int n)
 {
 	if (n == 4)

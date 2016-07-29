@@ -76,14 +76,15 @@ namespace Warp.Controls
         {
             Dispatcher.Invoke(() =>
             {
-                //lock (this)
+                lock (this)
                 {
                     PanelSegments.Children.Clear();
                     List<Movie> ImmutableMovies = Movies.ToList();
 
                     // Update number of processed movies.
                     int NProcessed = ImmutableMovies.Sum(m => m.Status == ProcessingStatus.Processed ? 1 : 0);
-                    TextNumberProcessed.Text = $"Processed {NProcessed}/{ImmutableMovies.Count}.";
+                    int NProcessable = ImmutableMovies.Sum(m => m.Status != ProcessingStatus.Skip ? 1 : 0);
+                    TextNumberProcessed.Text = $"Processed {NProcessed}/{NProcessable}.";
 
                     if (DataContext?.GetType() != typeof (Options))
                         return;
@@ -137,7 +138,7 @@ namespace Warp.Controls
                                 new Thickness(Math.Max(0, Math.Min(IdealOffset - (float) PathPosition.ActualWidth / 2f,
                                               ActualWidth - PathPosition.ActualWidth)), 0, 0, 0);
 
-                            TextCurrentName.Text = CurrentMovie.RootName;
+                            //TextCurrentName.Content = CurrentMovie.RootName;
                             TextCurrentName.Margin =
                                 new Thickness(Math.Max(0, Math.Min(IdealOffset - (float) TextCurrentName.ActualWidth / 2f,
                                               ActualWidth - TextCurrentName.ActualWidth)), 0, 0, 0);
@@ -169,8 +170,10 @@ namespace Warp.Controls
                 return new SolidColorBrush(Colors.Green);
             else if (status == ProcessingStatus.Outdated)
                 return new SolidColorBrush(Colors.Orange);
-            else
+            else if (status == ProcessingStatus.Unprocessed)
                 return new SolidColorBrush(Colors.Red);
+            else
+                return new SolidColorBrush(Colors.DarkGray);
         }
 
         private void MainGrid_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -190,7 +193,7 @@ namespace Warp.Controls
             }
         }
 
-        private void MainGrid_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void MainGrid_OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (Movies.Count == 0)
                 return;

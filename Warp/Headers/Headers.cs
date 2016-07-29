@@ -20,10 +20,12 @@ namespace Warp.Headers
         {
             MapHeader Header = null;
 
-            if (info.Extension.ToLower() == ".mrc" || info.Extension.ToLower() == ".mrcs")
+            if (info.Extension.ToLower() == ".mrc" || info.Extension.ToLower() == ".mrcs" || info.Extension.ToLower() == ".ali" || info.Extension.ToLower() == ".rec" || info.Extension.ToLower() == ".st")
                 Header = new HeaderMRC(reader);
             else if (info.Extension.ToLower() == ".em")
                 Header = new HeaderEM(reader);
+            else if (info.Extension.ToLower() == ".tif" || info.Extension.ToLower() == ".tiff")
+                Header = new HeaderTiff(info.FullName);
             else if (info.Extension.ToLower() == ".dat")
             {
                 long SliceElements = headerlessSliceDims.Elements() * ImageFormatsHelper.SizeOf(headerlessType);
@@ -52,7 +54,7 @@ namespace Warp.Headers
 
         public static MapHeader ReadFromFile(string path)
         {
-            return ReadFromFile(path, new int2(1, 1), 0, typeof(char));
+            return ReadFromFile(path, new int2(1, 1), 0, typeof(byte));
         }
     }
 
@@ -62,7 +64,8 @@ namespace Warp.Headers
         MRCS = 1,
         EM = 2,
         K2Raw = 3,
-        FEIRaw = 4        
+        FEIRaw = 4,
+        TIFF = 5    
     }
 
     public static class ImageFormatsHelper
@@ -81,6 +84,8 @@ namespace Warp.Headers
                     return ImageFormats.K2Raw;
                 case "FEIRaw":
                     return ImageFormats.FEIRaw;
+                case "TIFF":
+                    return ImageFormats.TIFF;
                 default:
                     return ImageFormats.MRC;
             }
@@ -100,6 +105,8 @@ namespace Warp.Headers
                     return "K2Raw";
                 case ImageFormats.FEIRaw:
                     return "FEIRaw";
+                case ImageFormats.TIFF:
+                    return "TIFF";
                 default:
                     return "";
             }
@@ -119,6 +126,8 @@ namespace Warp.Headers
                     return ".dat";
                 case ImageFormats.FEIRaw:
                     return ".raw";
+                case ImageFormats.TIFF:
+                    return ".tif";
                 default:
                     return "";
             }
@@ -135,7 +144,7 @@ namespace Warp.Headers
                 case ImageFormats.EM:
                     return new HeaderEM();
                 case ImageFormats.K2Raw:
-                    return new HeaderRaw(new int3(1, 1, 1), 0, typeof(char));
+                    return new HeaderRaw(new int3(1, 1, 1), 0, typeof(byte));
                 case ImageFormats.FEIRaw:
                     return new HeaderRaw(new int3(1, 1, 1), 49, typeof(int));
                 default:
@@ -145,8 +154,8 @@ namespace Warp.Headers
 
         public static long SizeOf(Type type)
         {
-            if (type == typeof(char))
-                return sizeof(char);
+            if (type == typeof(byte))
+                return sizeof(byte);
             else if (type == typeof(ushort) || type == typeof(short))
                 return sizeof (short);
             else if (type == typeof(uint) || type == typeof(int))
@@ -164,7 +173,7 @@ namespace Warp.Headers
         public static Type StringToType(string name)
         {
             if (name == "int8")
-                return typeof (char);
+                return typeof (byte);
             else if (name == "int16")
                 return typeof(short);
             else if (name == "int32")

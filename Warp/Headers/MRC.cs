@@ -64,6 +64,18 @@ namespace Warp.Headers
 
         public byte[] Extended;
 
+        public bool ImodHasTilt;
+        private bool ImodHasMontage;
+        private bool ImodHasStagePos;
+        public bool ImodHasMagnification;
+        public bool ImodHasIntensity;
+        public bool ImodHasExposure;
+
+        public float[] ImodTilt;
+        public float[] ImodMagnification;
+        public float[] ImodIntensity;
+        public float[] ImodExposure;
+
         public HeaderMRC()
         {
             for (int i = 0; i < Labels.Length; i++)
@@ -115,7 +127,59 @@ namespace Warp.Headers
             for (int i = 0; i < 10; i++)
                 Labels[i] = reader.ReadBytes(80);
 
-            Extended = reader.ReadBytes(ExtendedBytes);
+            // In case this is from SerialEM, check how big ExtendedBytes should be at least to read per-frame data
+            ImodHasTilt = (NReal & (1 << 0)) > 0;
+            ImodHasMontage = (NReal & (1 << 1)) > 0;
+            ImodHasStagePos = (NReal & (1 << 2)) > 0;
+            ImodHasMagnification = (NReal & (1 << 3)) > 0;
+            ImodHasIntensity = (NReal & (1 << 4)) > 0;
+            ImodHasExposure = (NReal & (1 << 5)) > 0;
+
+            int BytesPerSection = (ImodHasTilt ? 2 : 0) +
+                                  (ImodHasMontage ? 6 : 0) +
+                                  (ImodHasStagePos ? 4 : 0) +
+                                  (ImodHasMagnification ? 2 : 0) +
+                                  (ImodHasIntensity ? 2 : 0) +
+                                  (ImodHasExposure ? 4 : 0);
+
+            if (BytesPerSection * Dimensions.Z > ExtendedBytes) // Not from SerialEM, ignore extended header
+            {
+                Extended = reader.ReadBytes(ExtendedBytes);
+            }
+            else    // SerialEM extended header, read one section per frame
+            {
+                if (ImodHasTilt)
+                    ImodTilt = new float[Dimensions.Z];
+                if (ImodHasMagnification)
+                    ImodMagnification = new float[Dimensions.Z];
+                if (ImodHasIntensity)
+                    ImodIntensity = new float[Dimensions.Z];
+                if (ImodHasExposure)
+                    ImodExposure = new float[Dimensions.Z];
+
+                for (int i = 0; i < Dimensions.Z; i++)
+                {
+                    if (ImodHasTilt)
+                        ImodTilt[i] = reader.ReadInt16() / 100f;
+                    if (ImodHasMontage)
+                        reader.ReadBytes(6);
+                    if (ImodHasStagePos)
+                        reader.ReadBytes(4);
+                    if (ImodHasMagnification)
+                        ImodMagnification[i] = reader.ReadInt16() / 100f;
+                    if (ImodHasIntensity)
+                        ImodIntensity[i] = reader.ReadInt16() / 2500f;
+                    if (ImodHasExposure)
+                    {
+                        float val = reader.ReadSingle();
+                        /*int s1 = reader.ReadInt16();
+                        int s2 = reader.ReadInt16();
+
+                        float val = Math.Sign(s1) * (Math.Abs(s1) * 256 + (Math.Abs(s2) % 256)) * (float)Math.Pow(2, Math.Sign(s2) * (Math.Abs(s2) / 256f));*/
+                        ImodExposure[i] = val;
+                    }
+                }
+            }
         }
 
         public override void Write(BinaryWriter writer)

@@ -71,274 +71,332 @@
             </Style>
         </ResourceDictionary>
     </Window.Resources>
+    <m:MetroWindow.RightWindowCommands>
+        <m:WindowCommands>
+            <TextBlock Name="TextGPUStats" Text="{Binding GPUStats}" Margin="10,0,10,0" Foreground="White" />
+        </m:WindowCommands>
+    </m:MetroWindow.RightWindowCommands>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="400" />
+            <ColumnDefinition Width="420" />
             <ColumnDefinition Width="30" />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
-        <Grid VerticalAlignment="Stretch">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="180" />
-            </Grid.RowDefinitions>
-            <StackPanel Grid.Column="0" Orientation="Vertical" Margin="4,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition />
-                    </Grid.ColumnDefinitions>
-                    <Label Content="Options" FontSize="27.5" Foreground="{DynamicResource AccentColorBrush}" />
-                    <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,8,0,0">
-                        <Button Name="ButtonOptionsSave" Content="SAVE" FontSize="10" HorizontalAlignment="Left" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonOptionsSave_OnClick" />
-                        <Button Name="ButtonOptionsLoad" Content="LOAD" FontSize="10" HorizontalAlignment="Left" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonOptionsLoad_OnClick" />
-                    </StackPanel>
-                </Grid>
-                <Label Content="IO" FontSize="20" />
-                <Grid Name="GridOptionsIO" Margin="6,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="60" />
-                        <ColumnDefinition />
-                    </Grid.ColumnDefinitions>
+        <TabControl>
+            <TabItem Header="Micrographs">
+                <Grid VerticalAlignment="Stretch">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="180" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Input: " />
-                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
-                        <Button Name="ButtonInputPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonInputPath_OnClick">
-                            <TextBlock Name="ButtonInputPathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
-                        </Button>
-                        <TextBlock Text=" — " />
-                        <Button Name="ButtonInputExtension" Content="{Binding InputExtension}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonInputExtension_OnClick" />
-                        <Popup Name="PopupInputExtension" PlacementTarget="{Binding ElementName=ButtonInputExtension}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
-                            <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
-                                <StackPanel Orientation="Vertical" Margin="6">
-                                    <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRC" IsChecked="{Binding Path=InputExtensionMRC, Mode=TwoWay}" FontSize="13" />
-                                    <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRCS" IsChecked="{Binding Path=InputExtensionMRCS, Mode=TwoWay}" FontSize="13" />
-                                    <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="EM" IsChecked="{Binding Path=InputExtensionEM, Mode=TwoWay}" FontSize="13" />
-                                    <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="DAT" IsChecked="{Binding Path=InputExtensionDAT, Mode=TwoWay}" FontSize="13" />
-                                    <StackPanel Orientation="Horizontal" Margin="26,3,0,0">
-                                        <s:ValueSlider Value="{Binding InputDatWidth, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} x " MinValue="2" MaxValue="100000" StepSize="1" />
-                                        <s:ValueSlider Value="{Binding InputDatHeight, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} px" MinValue="2" MaxValue="100000" StepSize="1" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Vertical" Margin="26,0,0,0">
-                                        <ComboBox SelectedItem="{Binding InputDatType, Mode=TwoWay}" ItemsSource="{Binding InputDatTypes}" Margin="0,8,0,0" />
-                                        <s:ValueSlider Value="{Binding InputDatOffset, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Offset {0} bytes." MinValue="0" MaxValue="100000000000" StepSize="1" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Output: " />
-                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-                        <Button Name="ButtonOutputPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonOutputPath_OnClick">
-                            <TextBlock Name="ButtonOutputPathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
-                        </Button>
-                        <TextBlock Text=" — " />
-                        <Button Name="ButtonOutputExtension" Content="{Binding OutputExtension}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonOutputExtension_OnClick" />
-                        <Popup Name="PopupOutputExtension" PlacementTarget="{Binding ElementName=ButtonOutputExtension}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
-                            <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
-                                <StackPanel Orientation="Vertical" Margin="6">
-                                    <RadioButton GroupName="OutFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRC" IsChecked="{Binding Path=OutputExtensionMRC, Mode=TwoWay}" FontSize="13" />
-                                    <RadioButton GroupName="OutFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="EM" IsChecked="{Binding Path=OutputExtensionEM, Mode=TwoWay}" FontSize="13" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Originals: " />
-                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
-                        <Button Name="ButtonArchiveOperation" Content="{Binding ArchiveOperation}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchiveOperation_OnClick" />
-                        <Popup Name="PopupArchiveOperation" PlacementTarget="{Binding ElementName=ButtonArchiveOperation}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
-                            <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
-                                <StackPanel Orientation="Vertical" Margin="6">
-                                    <RadioButton GroupName="ArchiveOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="Compress" IsChecked="{Binding Path=ArchiveOperationCompress, Mode=TwoWay}" FontSize="13" />
-                                    <RadioButton GroupName="ArchiveOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="Move" IsChecked="{Binding Path=ArchiveOperationMove, Mode=TwoWay}" FontSize="13" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                        <TextBlock Text=" to " />
-                        <Button Name="ButtonArchivePath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchivePath_OnClick">
-                            <TextBlock Name="ButtonArchivePathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
-                        </Button>
-                    </StackPanel>
-                    <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" IsChecked="{Binding ExpectTiltSeries}" FontSize="13" Content="Expect tilt series." />
-                </Grid>
-                <Label Content="Pre-processing" FontSize="20" Margin="0,12,0,0" />
-                <Grid Name="GridOptionsPreprocessing" Margin="6,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
-                    </Grid.RowDefinitions>
-                    <CheckBox Grid.Row="0" IsChecked="{Binding CorrectGain}" FontSize="13">
-                        <CheckBox.Content>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Correct gain using " />
-                                <Button Name="ButtonGainPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonGainPath_OnClick">
-                                    <TextBlock Name="ButtonGainPathText" TextTrimming="CharacterEllipsis">Select reference...</TextBlock>
+                    <StackPanel Grid.Column="0" Orientation="Vertical" Margin="4,0">
+                        <Label Content="IO" FontSize="20" />
+                        <Grid Name="GridOptionsIO" Margin="6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60" />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Input: " />
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                                <Button Name="ButtonInputPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonInputPath_OnClick">
+                                    <TextBlock Name="ButtonInputPathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
                                 </Button>
-                                <TextBlock Text="." />
+                                <TextBlock Text=" — " />
+                                <Button Name="ButtonInputExtension" Content="{Binding InputExtension}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonInputExtension_OnClick" />
+                                <Popup Name="PopupInputExtension" PlacementTarget="{Binding ElementName=ButtonInputExtension}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
+                                    <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
+                                        <StackPanel Orientation="Vertical" Margin="6">
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRC" IsChecked="{Binding Path=InputExtensionMRC, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRCS" IsChecked="{Binding Path=InputExtensionMRCS, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="EM" IsChecked="{Binding Path=InputExtensionEM, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="TIFF" IsChecked="{Binding Path=InputExtensionTIFF, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="IMOD ALI" IsChecked="{Binding Path=InputExtensionALI, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="InFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="DAT" IsChecked="{Binding Path=InputExtensionDAT, Mode=TwoWay}" FontSize="13" />
+                                            <StackPanel Orientation="Horizontal" Margin="26,3,0,0">
+                                                <s:ValueSlider Value="{Binding InputDatWidth, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} x " MinValue="2" MaxValue="100000" StepSize="1" />
+                                                <s:ValueSlider Value="{Binding InputDatHeight, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} px" MinValue="2" MaxValue="100000" StepSize="1" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Vertical" Margin="26,0,0,0">
+                                                <ComboBox SelectedItem="{Binding InputDatType, Mode=TwoWay}" ItemsSource="{Binding InputDatTypes}" Margin="0,8,0,0" />
+                                                <s:ValueSlider Value="{Binding InputDatOffset, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Offset {0} bytes." MinValue="0" MaxValue="100000000000" StepSize="1" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
                             </StackPanel>
-                        </CheckBox.Content>
-                    </CheckBox>
-                    <CheckBox Grid.Row="1" IsChecked="{Binding CorrectBlackRectangles}" Content="Discard frames with black rectangles." FontSize="13" />
-                    <CheckBox Grid.Row="2" IsChecked="{Binding CorrectDoseWeighting}" FontSize="13">
-                        <s:ValueSlider Value="{Binding CorrectDosePerFrame, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Weight frequencies according to dose, {0} e⁻/px/frame." MinValue="0.1" MaxValue="10000" StepSize="0.1" />
-                    </CheckBox>
-                </Grid>
-                <Label Content="CTF" FontSize="20" Margin="0,12,0,0" />
-                <Grid Name="GridOptionsCTF" Margin="6,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition />
-                        <ColumnDefinition />
-                        <ColumnDefinition />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="28" />
-                        <RowDefinition Height="28" />
-                        <RowDefinition Height="28" />
-                        <RowDefinition Height="28" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
-                        <s:ValueSlider Value="{Binding CTFWindow, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Window: {0} px" MinValue="128" MaxValue="1536" StepSize="128" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Output: " />
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                <Button Name="ButtonOutputPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonOutputPath_OnClick">
+                                    <TextBlock Name="ButtonOutputPathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
+                                </Button>
+                                <TextBlock Text=" — " />
+                                <Button Name="ButtonOutputExtension" Content="{Binding OutputExtension}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonOutputExtension_OnClick" />
+                                <Popup Name="PopupOutputExtension" PlacementTarget="{Binding ElementName=ButtonOutputExtension}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
+                                    <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
+                                        <StackPanel Orientation="Vertical" Margin="6">
+                                            <RadioButton GroupName="OutFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="MRC" IsChecked="{Binding Path=OutputExtensionMRC, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="OutFormatOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="EM" IsChecked="{Binding Path=OutputExtensionEM, Mode=TwoWay}" FontSize="13" />
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Originals: " />
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                <Button Name="ButtonArchiveOperation" Content="{Binding ArchiveOperation}" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchiveOperation_OnClick" />
+                                <Popup Name="PopupArchiveOperation" PlacementTarget="{Binding ElementName=ButtonArchiveOperation}" IsOpen="False" StaysOpen="False" PopupAnimation="Fade">
+                                    <Border Background="White" BorderBrush="Black" BorderThickness="0.5">
+                                        <StackPanel Orientation="Vertical" Margin="6">
+                                            <RadioButton GroupName="ArchiveOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="Compress" IsChecked="{Binding Path=ArchiveOperationCompress, Mode=TwoWay}" FontSize="13" />
+                                            <RadioButton GroupName="ArchiveOptions" VerticalAlignment="Center" Margin="0,3,0,0" Content="Move" IsChecked="{Binding Path=ArchiveOperationMove, Mode=TwoWay}" FontSize="13" />
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                                <TextBlock Text=" to " />
+                                <Button Name="ButtonArchivePath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchivePath_OnClick">
+                                    <TextBlock Name="ButtonArchivePathText" TextTrimming="CharacterEllipsis">Select folder...</TextBlock>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <Label Content="Pre-processing" FontSize="20" Margin="0,12,0,0" />
+                        <Grid Name="GridOptionsPreprocessing" Margin="6,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="24" />
+                                <!--<RowDefinition Height="24" />
+                                <RowDefinition Height="24" />-->
+                            </Grid.RowDefinitions>
+                            <CheckBox Grid.Row="0" IsChecked="{Binding CorrectGain}" FontSize="13">
+                                <CheckBox.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Correct gain using " />
+                                        <Button Name="ButtonGainPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonGainPath_OnClick">
+                                            <TextBlock Name="ButtonGainPathText" TextTrimming="CharacterEllipsis">Select reference...</TextBlock>
+                                        </Button>
+                                        <TextBlock Text="." />
+                                    </StackPanel>
+                                </CheckBox.Content>
+                            </CheckBox>
+                            <!--<CheckBox Grid.Row="1" IsChecked="{Binding CorrectBlackRectangles}" Content="Discard frames with black rectangles." FontSize="13" />-->
+                            <!--<CheckBox Grid.Row="2" IsChecked="{Binding CorrectDoseWeighting}" FontSize="13">
+                                <s:ValueSlider Value="{Binding CorrectDosePerFrame, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Weight frequencies according to dose, {0} e⁻/px/frame." MinValue="0.1" MaxValue="10000" StepSize="0.1" />
+                            </CheckBox>-->
+                        </Grid>
+                        <Label Content="Use particles" FontSize="20" Margin="0,12,0,0" />
+                        <Grid Name="GridOptionsParticles" Margin="6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="72" />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="data.star: " />
+                            <Button Grid.Row="0" Grid.Column="1" Name="ButtonDataStarPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonDataStarPath_OnClick">
+                                <TextBlock Name="ButtonDataStarPathText" TextTrimming="CharacterEllipsis">Select file...</TextBlock>
+                            </Button>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="model.star: " />
+                            <Button Grid.Row="1" Grid.Column="1" Name="ButtonModelStarPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonModelStarPath_OnClick">
+                                <TextBlock Name="ButtonModelStarPathText" TextTrimming="CharacterEllipsis">Select file...</TextBlock>
+                            </Button>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Reference: " />
+                            <Button Grid.Row="2" Grid.Column="1" Name="ButtonReferencePath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonReferencePath_OnClick">
+                                <TextBlock Name="ButtonReferencePathText" TextTrimming="CharacterEllipsis">Select file...</TextBlock>
+                            </Button>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Mask: " />
+                            <Button Grid.Row="3" Grid.Column="1" Name="ButtonMaskPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonMaskPath_OnClick">
+                                <TextBlock Name="ButtonMaskPathText" TextTrimming="CharacterEllipsis">Select file...</TextBlock>
+                            </Button>
+                            <s:ValueSlider Grid.Row="4" Grid.ColumnSpan="2" TextFormat="Oversample projections {0}x." UpdateTrigger="PropertyChanged" Value="{Binding ProjectionOversample, Mode=TwoWay}" MinValue="1" StepSize="1" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox Name="SwitchProcessCTF" IsChecked="{Binding ProcessCTF, Mode=TwoWay}" VerticalAlignment="Bottom" Margin="6,0,0,7" />
+                            <Label Content="CTF" FontSize="20" Margin="0,12,0,0" />
+                        </StackPanel>
+                        <StackPanel IsEnabled="{Binding ProcessCTF}" Orientation="Vertical">
+                            <Grid Name="GridOptionsCTF" Margin="6,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition />
+                                    <ColumnDefinition />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="28" />
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                    <s:ValueSlider Value="{Binding CTFWindow, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Window: {0} px" MinValue="128" MaxValue="2048" StepSize="128" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                                    <TextBlock Text="Range: " />
+                                    <s:ValueSlider Value="{Binding CTFRangeMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0" MaxValue="0.99" StepSize="0.01" />
+                                    <TextBlock Text="–" />
+                                    <s:ValueSlider Value="{Binding CTFRangeMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1.00" StepSize="0.01" />
+                                    <TextBlock Text=" Ny" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal">
+                                    <TextBlock Text="Min Quality: " />
+                                    <s:ValueSlider Value="{Binding CTFMinQuality, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1.00" StepSize="0.01" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal">
+                                    <s:ValueSlider Value="{Binding CTFVoltage, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Voltage: {0} kV" MinValue="10" MaxValue="2000" StepSize="10" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                    <s:ValueSlider Value="{Binding CTFCs, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Cs: {0} mm" MinValue="0.00" MaxValue="10" StepSize="0.01" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal">
+                                    <s:ValueSlider Value="{Binding CTFAmplitude, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Amplitude: {0}" MinValue="0" MaxValue="1" StepSize="0.01" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="Pixel: " />
+                                    <s:ValueSlider Value="{Binding CTFPixelMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1000" StepSize="0.0001" />
+                                    <TextBlock Text=" – " />
+                                    <s:ValueSlider Value="{Binding CTFPixelMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1000" StepSize="0.0001" />
+                                    <TextBlock Text=" Å" />
+                                </StackPanel>
+                                <Grid Grid.Row="2" Grid.Column="1" VerticalAlignment="Top">
+                                    <Canvas Margin="6,4,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <Canvas>
+                                            <Canvas.LayoutTransform>
+                                                <RotateTransform x:Name="TransformPixelAngle" Angle="0" />
+                                            </Canvas.LayoutTransform>
+                                            <Path Width="17" Height="9" Canvas.Left="-8.5" Canvas.Top="-4.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Fill="#FFFFFFFF" Data="F1 M 9,1C 13.4182,1 17,2.79089 17,5C 17,7.20917 13.4183,9 9,9C 4.58171,9 0.999999,7.20917 0.999999,5C 0.999999,2.79089 4.58176,1 9,1 Z "/>
+                                            <Path Width="9" Height="1" Canvas.Left="-0.5" Canvas.Top="-0.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Data="F1 M 9,5L 17,5"/>
+                                            <Path Width="1" Height="5" Canvas.Left="-0.5" Canvas.Top="-4.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Data="F1 M 9,5L 9,1"/>
+                                        </Canvas>
+                                    </Canvas>
+                                    <s:ValueSlider Value="{Binding CTFPixelAngle, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} °" MinValue="0" MaxValue="359" StepSize="0.5" Margin="20,0,0,0" />
+                                </Grid>
+                                <CheckBox Grid.Row="2" Grid.Column="2" IsChecked="{Binding CTFDoPhase}" Content="Phase Shift" FontSize="13" VerticalAlignment="Top" />
+                                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal">
+                                    <TextBlock Text="Astigmatism: " />
+                                    <Button Name="ButtonAstigmatismPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchivePath_OnClick">
+                                        <TextBlock TextTrimming="CharacterEllipsis">Drop Here</TextBlock>
+                                    </Button>
+                                    <TextBlock Text=" (" />
+                                    <s:ValueSlider Value="{Binding CTFAstigmatism, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} μm, " MinValue="0" MaxValue="10" StepSize="0.001" />
+                                    <s:ValueSlider Value="{Binding CTFAstigmatismAngle, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} °)" MinValue="0" MaxValue="359.5" StepSize="0.5" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="3" Grid.Column="2" Orientation="Horizontal">
+                                    <TextBlock Text="Defocus: " />
+                                    <s:ValueSlider Value="{Binding CTFZMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="-1000" MaxValue="1000" StepSize="0.1" />
+                                    <TextBlock Text="–" />
+                                    <s:ValueSlider Value="{Binding CTFZMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="-1000" MaxValue="1000" StepSize="0.1" />
+                                    <TextBlock Text=" μm" />
+                                </StackPanel>
+                            </Grid>
+                            <CheckBox Name="SwitchProcessParticleCTF" IsChecked="{Binding ProcessParticleCTF, Mode=TwoWay}" Content="Use particles" FontSize="13" Margin="6,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox Name="SwitchProcessMovement" IsChecked="{Binding ProcessMovement, Mode=TwoWay}" VerticalAlignment="Bottom" Margin="6,0,0,7" />
+                            <Label Content="Movement" FontSize="20" Margin="0,12,0,0" />
+                        </StackPanel>
+                        <StackPanel IsEnabled="{Binding ProcessMovement}">
+                            <StackPanel Name="GridOptionsMovement" Margin="6,0" Orientation="Vertical">
+                                <StackPanel Orientation="Horizontal" Height="20">
+                                    <TextBlock Text="Consider " />
+                                    <s:ValueSlider Value="{Binding MovementRangeMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0" MaxValue="0.99" StepSize="0.01" />
+                                    <TextBlock Text="–" />
+                                    <s:ValueSlider Value="{Binding MovementRangeMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1" StepSize="0.01" />
+                                    <TextBlock Text=" Ny, weight with B = " />
+                                    <s:ValueSlider Value="{Binding MovementBfactor, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} Å²" MinValue="-10000" MaxValue="0" StepSize="10" />
+                                </StackPanel>
+                                <CheckBox Name="SwitchProcessParticleShift" IsChecked="{Binding ProcessParticleShift, Mode=TwoWay}" Content="Use particles" FontSize="13" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Label Content="Grids" FontSize="20" Margin="0,12,0,0" />
+                        <Grid Name="GridOptionsGrids" Margin="6,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="80" />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <w:GridMiniature Grid.Row="0" Grid.Column="0" PointsX="{Binding GridCTFX}" PointsY="{Binding GridCTFY}" PointsZ="{Binding GridCTFZ}" Margin="10,0,10,15" />
+                            <w:GridMiniature Grid.Row="0" Grid.Column="1" PointsX="{Binding GridMoveX}" PointsY="{Binding GridMoveY}" PointsZ="{Binding GridMoveZ}" Margin="10,0,10,15" />
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,0,0,0">
+                                <TextBlock Text="CTF: " />
+                                <s:ValueSlider Value="{Binding GridCTFX, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                                <TextBlock Text=" x " />
+                                <s:ValueSlider Value="{Binding GridCTFY, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                                <TextBlock Text=" x " />
+                                <s:ValueSlider Value="{Binding GridCTFZ, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,0,0,0">
+                                <TextBlock Text="Movement: " />
+                                <s:ValueSlider Value="{Binding GridMoveX, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                                <TextBlock Text=" x " />
+                                <s:ValueSlider Value="{Binding GridMoveY, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                                <TextBlock Text=" x " />
+                                <s:ValueSlider Value="{Binding GridMoveZ, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
+                            </StackPanel>
+                        </Grid>
+                        <Label Content="Post-processing" FontSize="20" Margin="0,12,0,0" />
+                        <Grid Name="GridOptionsPostprocessing" Margin="6,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="24" />
+                                <RowDefinition Height="24" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <s:ValueSlider Value="{Binding PostBinTimes, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Bin output {0}x " MinValue="0" MaxValue="10" StepSize="0.01" />
+                                <s:FormattedTextBlock Value="{Binding BinnedPixelSize}" TextFormat="({0:0.000} Å/px)." />
+                            </StackPanel>
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding PostAverage}" Content="Produce average." FontSize="13" />
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" IsChecked="{Binding PostStack}" FontSize="13">
+                                <CheckBox.Content>
+                                    <s:ValueSlider Value="{Binding PostStackGroupSize, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Produce aligned stack, collapse every {0} frames." MinValue="1" MaxValue="100" StepSize="1" />
+                                </CheckBox.Content>
+                            </CheckBox>
+                        </Grid>
+                        <Label Content="Particle export" FontSize="20" Margin="0,12,0,0" />
+                        <Grid Name="GridOptionsParticleExport" Margin="6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <s:ValueSlider TextFormat="Box size: {0} px" Value="{Binding ExportParticleSize, Mode=TwoWay}" UpdateTrigger="PropertyChanged" MinValue="32" MaxValue="1024" StepSize="2" />
+                            <s:ValueSlider Grid.Column="1" TextFormat="Particle radius: {0} Å" Value="{Binding ExportParticleRadius, Mode=TwoWay}" UpdateTrigger="PropertyChanged" MinValue="4" MaxValue="1024" StepSize="1" />
+                        </Grid>
                     </StackPanel>
-                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
-                        <TextBlock Text="Range: " />
-                        <s:ValueSlider Value="{Binding CTFRangeMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0" MaxValue="0.99" StepSize="0.01" />
-                        <TextBlock Text="–" />
-                        <s:ValueSlider Value="{Binding CTFRangeMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1.00" StepSize="0.01" />
-                        <TextBlock Text=" Ny" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal">
-                        <TextBlock Text="Min Quality: " />
-                        <s:ValueSlider Value="{Binding CTFMinQuality, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1.00" StepSize="0.01" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal">
-                        <s:ValueSlider Value="{Binding CTFVoltage, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Voltage: {0} kV" MinValue="10" MaxValue="2000" StepSize="10" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-                        <s:ValueSlider Value="{Binding CTFCs, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Cs: {0} mm" MinValue="0.00" MaxValue="10" StepSize="0.01" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal">
-                        <s:ValueSlider Value="{Binding CTFAmplitude, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Amplitude: {0}" MinValue="0" MaxValue="1" StepSize="0.01" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
-                        <TextBlock Text="Pixel: " />
-                        <s:ValueSlider Value="{Binding CTFPixelMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1000" StepSize="0.01" />
-                        <TextBlock Text=" / " />
-                        <s:ValueSlider Value="{Binding CTFPixelMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1000" StepSize="0.01" />
-                        <TextBlock Text=" Å" />
-                    </StackPanel>
-                    <Grid Grid.Row="2" Grid.Column="1" VerticalAlignment="Top">
-                        <Canvas Margin="6,4,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
-                            <Canvas>
-                                <Canvas.LayoutTransform>
-                                    <RotateTransform x:Name="TransformPixelAngle" Angle="0" />
-                                </Canvas.LayoutTransform>
-                                <Path Width="17" Height="9" Canvas.Left="-8.5" Canvas.Top="-4.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Fill="#FFFFFFFF" Data="F1 M 9,1C 13.4182,1 17,2.79089 17,5C 17,7.20917 13.4183,9 9,9C 4.58171,9 0.999999,7.20917 0.999999,5C 0.999999,2.79089 4.58176,1 9,1 Z "/>
-                                <Path Width="9" Height="1" Canvas.Left="-0.5" Canvas.Top="-0.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Data="F1 M 9,5L 17,5"/>
-                                <Path Width="1" Height="5" Canvas.Left="-0.5" Canvas.Top="-4.5" Stretch="Fill" StrokeLineJoin="Round" Stroke="Black" Data="F1 M 9,5L 9,1"/>
-                            </Canvas>
-                        </Canvas>
-                        <s:ValueSlider Value="{Binding CTFPixelAngle, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} °" MinValue="0" MaxValue="359" StepSize="0.5" Margin="20,0,0,0" />
+                    <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,20" VerticalAlignment="Bottom">
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="8" />
+                            <RowDefinition />
+                            <RowDefinition Height="8" />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Button Name="ButtonStartProcessing" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="START PROCESSING" FontSize="41" Foreground="CornflowerBlue" HorizontalAlignment="Center" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonStartProcessing_OnClick" />
+                        <Button Name="ButtonExportParticles" Grid.Row="2" Grid.Column="0" Content="EXPORT PARTICLES" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Left" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonExportParticles_OnClick" />
+                        <Button Name="ButtonPolishParticles" Grid.Row="2" Grid.Column="1" Content="POLISH PARTICLES" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Right" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonPolishParticles_OnClick" />
+                        <Button Name="ButtonExportList"  Grid.Row="4" Grid.Column="0" Content="EXPORT MIC LIST" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Left" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonExportList_OnClick" />
+                        <Button Name="ButtonExportStatistics"  Grid.Row="4" Grid.Column="1" Content="EXPORT STATISTICS" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Right" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonExportStatistics_OnClick" />
                     </Grid>
-                    <CheckBox Grid.Row="2" Grid.Column="2" IsChecked="{Binding CTFDoPhase}" Content="Phase Shift" FontSize="13" VerticalAlignment="Top" />
-                    <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal">
-                        <TextBlock Text="Astigmatism: " />
-                        <Button Name="ButtonAstigmatismPath" Style="{StaticResource HyperlinkLikeButton}" Click="ButtonArchivePath_OnClick">
-                            <TextBlock TextTrimming="CharacterEllipsis">Drop Here</TextBlock>
-                        </Button>
-                        <TextBlock Text=" (" />
-                        <s:ValueSlider Value="{Binding CTFAstigmatism, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} μm, " MinValue="0" MaxValue="10" StepSize="0.001" />
-                        <s:ValueSlider Value="{Binding CTFAstigmatismAngle, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0} °)" MinValue="0" MaxValue="359.5" StepSize="0.5" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="3" Grid.Column="2" Orientation="Horizontal">
-                        <TextBlock Text="Defocus: " />
-                        <s:ValueSlider Value="{Binding CTFZMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="-1000" MaxValue="1000" StepSize="0.1" />
-                        <TextBlock Text="–" />
-                        <s:ValueSlider Value="{Binding CTFZMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="-1000" MaxValue="1000" StepSize="0.1" />
-                        <TextBlock Text=" μm" />
-                    </StackPanel>
                 </Grid>
-                <Label Content="Movement" FontSize="20" Margin="0,12,0,0" />
-                <StackPanel Name="GridOptionsMovement" Margin="6,0">
-                    <StackPanel Orientation="Horizontal" Height="20">
-                        <TextBlock Text="Consider frequencies: " />
-                        <s:ValueSlider Value="{Binding MovementRangeMin, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0" MaxValue="0.99" StepSize="0.01" />
-                        <TextBlock Text="–" />
-                        <s:ValueSlider Value="{Binding MovementRangeMax, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="0.01" MaxValue="1" StepSize="0.01" />
-                        <TextBlock Text=" Ny" />
-                    </StackPanel>
-                </StackPanel>
-                <Label Content="Grids" FontSize="20" Margin="0,12,0,0" />
-                <Grid Name="GridOptionsGrids" Margin="6,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition />
-                        <ColumnDefinition />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="80" />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
-                    <w:GridMiniature Grid.Row="0" Grid.Column="0" PointsX="{Binding GridCTFX}" PointsY="{Binding GridCTFY}" PointsZ="{Binding GridCTFZ}" Margin="10,0,10,15" />
-                    <w:GridMiniature Grid.Row="0" Grid.Column="1" PointsX="{Binding GridMoveX}" PointsY="{Binding GridMoveY}" PointsZ="{Binding GridMoveZ}" Margin="10,0,10,15" />
-                    <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,0,0,0">
-                        <TextBlock Text="CTF: " />
-                        <s:ValueSlider Value="{Binding GridCTFX, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                        <TextBlock Text=" x " />
-                        <s:ValueSlider Value="{Binding GridCTFY, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                        <TextBlock Text=" x " />
-                        <s:ValueSlider Value="{Binding GridCTFZ, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                    </StackPanel>
-                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="10,0,0,0">
-                        <TextBlock Text="Movement: " />
-                        <s:ValueSlider Value="{Binding GridMoveX, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                        <TextBlock Text=" x " />
-                        <s:ValueSlider Value="{Binding GridMoveY, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                        <TextBlock Text=" x " />
-                        <s:ValueSlider Value="{Binding GridMoveZ, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="{}{0}" MinValue="1" MaxValue="100" StepSize="1" />
-                    </StackPanel>
-                </Grid>
-                <Label Content="Post-processing" FontSize="20" Margin="0,12,0,0" />
-                <Grid Name="GridOptionsPostprocessing" Margin="6,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="24" />
-                        <RowDefinition Height="24" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition />
-                        <ColumnDefinition />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <s:ValueSlider Value="{Binding PostBinTimes, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Bin output {0}x " MinValue="0" MaxValue="10" StepSize="0.01" />
-                        <s:FormattedTextBlock Value="{Binding BinnedPixelSize}" TextFormat="({0:0.000} Å/px)." />
-                    </StackPanel>
-                    <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding PostAverage}" Content="Produce average." FontSize="13" />
-                    <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" IsChecked="{Binding PostStack}" FontSize="13">
-                        <CheckBox.Content>
-                            <s:ValueSlider Value="{Binding PostStackGroupSize, Mode=TwoWay}" UpdateTrigger="PropertyChanged" TextFormat="Produce aligned stack, collapse every {0} frames." MinValue="1" MaxValue="100" StepSize="1" />
-                        </CheckBox.Content>
-                    </CheckBox>
-                </Grid>
-            </StackPanel>
-            <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,56" VerticalAlignment="Bottom">
-                <Grid.RowDefinitions>
-                    <RowDefinition />
-                    <RowDefinition Height="8" />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition />
-                    <ColumnDefinition />
-                </Grid.ColumnDefinitions>
-                <Button Name="ButtonStartProcessing" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="START PROCESSING" FontSize="41" Foreground="CornflowerBlue" HorizontalAlignment="Center" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonStartProcessing_OnClick" />
-                <Button Name="ButtonExportParticles" Grid.Row="2" Grid.Column="0" Content="EXPORT PARTICLES" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Left" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonExportParticles_OnClick" />
-                <Button Name="ButtonExportStatistics"  Grid.Row="2" Grid.Column="1" Content="EXPORT STATISTICS" FontSize="20" Foreground="CornflowerBlue" HorizontalAlignment="Right" Style="{StaticResource ChromelessButtonStyle}" Click="ButtonExportStatistics_OnClick" />
-            </Grid>
-        </Grid>
+            </TabItem>
+            <TabItem Header="Particles">
+                
+            </TabItem>
+        </TabControl>
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition />
@@ -383,9 +441,11 @@
                     </Grid>
                 </TabItem>
                 <TabItem Header="Movement">
+                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                        <w:MicrographDisplay Movie="{Binding DisplayedMovie}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" MaxWidth="1024" MaxHeight="1024" />
+                    </Grid>
                 </TabItem>
-                <TabItem Header="Tilt">
-                </TabItem>
+                <TabItem Header="Statistics"></TabItem>
             </TabControl>
             <w:StatusBar Grid.Row="1" Movies="{Binding Movies}" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="0,0,10,0" />
         </Grid>

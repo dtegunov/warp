@@ -46,6 +46,16 @@ __declspec(dllexport) void RemapFromFTFloat(float* d_input, float* d_output, int
     d_RemapHalf2HalfFFT(d_input, d_output, dims, batch);
 }
 
+__declspec(dllexport) void RemapFullToFTFloat(float* d_input, float* d_output, int3 dims, uint batch)
+{
+    d_RemapFullFFT2Full(d_input, d_output, dims, batch);
+}
+
+__declspec(dllexport) void RemapFullFromFTFloat(float* d_input, float* d_output, int3 dims, uint batch)
+{
+    d_RemapFull2FullFFT(d_input, d_output, dims, batch);
+}
+
 __declspec(dllexport) void Extract(float* d_input, float* d_output, int3 dims, int3 dimsregion, int3* h_origins, uint batch)
 {
 	int3* d_origins = (int3*)CudaMallocFromHostArray(h_origins, batch * sizeof(int3));
@@ -111,6 +121,11 @@ __declspec(dllexport) void Xray(float* d_input, float* d_output, float ndevs, in
 
 // Arithmetics:
 
+__declspec(dllexport) void Abs(float* d_input, float* d_output, size_t length)
+{
+    d_Abs(d_input, d_output, length);
+}
+
 __declspec(dllexport) void Amplitudes(float2* d_input, float* d_output, size_t length)
 {
     d_Abs(d_input, d_output, length);
@@ -138,7 +153,7 @@ __declspec(dllexport) void MultiplySlices(float* d_input, float* d_multiplicator
 
 __declspec(dllexport) void DivideSlices(float* d_input, float* d_divisors, float* d_output, size_t sliceelements, uint slices)
 {
-	d_DivideByVector(d_input, d_divisors, d_output, sliceelements, slices);
+	d_DivideSafeByVector(d_input, d_divisors, d_output, sliceelements, slices);
 }
 
 __declspec(dllexport) void AddToSlicesHalf(half* d_input, half* d_summands, half* d_output, size_t sliceelements, uint slices)
@@ -163,5 +178,15 @@ __declspec(dllexport) void MultiplyComplexSlicesByScalar(float2* d_input, float*
 
 __declspec(dllexport) void DivideComplexSlicesByScalar(float2* d_input, float* d_multiplicators, float2* d_output, size_t sliceelements, uint slices)
 {
-	d_ComplexDivideByVector(d_input, d_multiplicators, d_output, sliceelements, slices);
+	d_ComplexDivideSafeByVector(d_input, d_multiplicators, d_output, sliceelements, slices);
+}
+
+__declspec(dllexport) void Scale(float* d_input, float* d_output, int3 dimsinput, int3 dimsoutput, uint batch)
+{
+	d_Scale(d_input, d_output, dimsinput, dimsoutput, T_INTERP_FOURIER, NULL, NULL, batch);
+}
+
+__declspec(dllexport) void ProjectForward(float2* d_inputft, float2* d_outputft, int3 dimsinput, int2 dimsoutput, float3* h_angles, float supersample, uint batch)
+{
+    d_rlnProject(d_inputft, dimsinput, d_outputft, toInt3(dimsoutput), (tfloat3*)h_angles, supersample, batch);
 }

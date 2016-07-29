@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -56,6 +59,7 @@ namespace Warp
             {
                 GridOptionsIO,
                 GridOptionsPreprocessing,
+                GridOptionsParticles,
                 GridOptionsCTF,
                 GridOptionsMovement,
                 GridOptionsGrids,
@@ -69,9 +73,11 @@ namespace Warp
             {
                 GPU.SetDevice(i);
                 Console.WriteLine($"Device {i}:");
-                Console.WriteLine($"Free memory: {GPU.GetFreeMemory()} MB");
-                Console.WriteLine($"Total memory: {GPU.GetTotalMemory()} MB");
+                Console.WriteLine($"Free memory: {GPU.GetFreeMemory(i)} MB");
+                Console.WriteLine($"Total memory: {GPU.GetTotalMemory(i)} MB");
             }
+
+            Options.UpdateGPUStats();
 
             // Create mockup
             {
@@ -97,6 +103,24 @@ namespace Warp
                 for (int i = 0; i < Managed.Length; i++)
                     if (Math.Abs(Managed[i] - Native[i]) > 1e-6f)
                         throw new Exception();
+
+                //Star Models = new Star("D:\\rado27\\Refine3D\\run1_ct5_it005_half1_model.star", "data_model_group_2");
+                //Debug.WriteLine(Models.GetRow(0)[0]);
+
+                /*Image Volume = StageDataLoad.LoadMap("F:\\carragher20s\\ref256.mrc", new int2(1, 1), 0, typeof (float));
+                Image VolumePadded = Volume.AsPadded(new int3(512, 512, 512));
+                VolumePadded.WriteMRC("d_padded.mrc");
+                Volume.Dispose();
+                VolumePadded.RemapToFT(true);
+                Image VolumeFT = VolumePadded.AsFFT(true);
+                VolumePadded.Dispose();
+
+                Image VolumeProjFT = VolumeFT.AsProjections(new[] { new float3(Helper.ToRad * 0, Helper.ToRad * 0, Helper.ToRad * 0) }, new int2(256, 256), 2f);
+                Image VolumeProj = VolumeProjFT.AsIFFT();
+                VolumeProjFT.Dispose();
+                VolumeProj.RemapFromFT();
+                VolumeProj.WriteMRC("d_proj.mrc");
+                VolumeProj.Dispose();*/
 
                 /*Options.Movies.Add(new Movie(@"D:\Dev\warp\May19_21.44.54.mrc"));
                 Options.Movies.Add(new Movie(@"D:\Dev\warp\May19_21.49.06.mrc"));
@@ -206,6 +230,42 @@ namespace Warp
                     return;
                 }
                 ButtonGainPathText.Text = Options.GainPath == "" ? "Select reference..." : Options.GainPath;
+            }
+            else if (e.PropertyName == "DataStarPath")
+            {
+                if (!File.Exists(Options.DataStarPath))
+                {
+                    Options.DataStarPath = "";
+                    return;
+                }
+                ButtonDataStarPathText.Text = Options.DataStarPath == "" ? "Select file..." : Options.DataStarPath;
+            }
+            else if (e.PropertyName == "ModelStarPath")
+            {
+                if (!File.Exists(Options.ModelStarPath))
+                {
+                    Options.ModelStarPath = "";
+                    return;
+                }
+                ButtonModelStarPathText.Text = Options.ModelStarPath == "" ? "Select file..." : Options.ModelStarPath;
+            }
+            else if (e.PropertyName == "ReferencePath")
+            {
+                if (!File.Exists(Options.ReferencePath))
+                {
+                    Options.ReferencePath = "";
+                    return;
+                }
+                ButtonReferencePathText.Text = Options.ReferencePath == "" ? "Select reference..." : Options.ReferencePath;
+            }
+            else if (e.PropertyName == "MaskPath")
+            {
+                if (!File.Exists(Options.MaskPath))
+                {
+                    Options.MaskPath = "";
+                    return;
+                }
+                ButtonMaskPathText.Text = Options.MaskPath == "" ? "Select mask..." : Options.MaskPath;
             }
             else if (e.PropertyName == "CTFWindow")
                 CTFDisplay.Width = CTFDisplay.Height = Math.Min(1024, Options.CTFWindow);
@@ -351,6 +411,166 @@ namespace Warp
 
                 ButtonStartProcessing.Content = "STOP PROCESSING";
                 IsProcessing = true;
+
+                Thread ProcessThread = new Thread(() =>
+                {
+                    int MaxDevices = 999;
+                    int UsedDevices = Math.Min(MaxDevices, GPU.GetDeviceCount());
+
+                    Image[] ImageGain = new Image[UsedDevices];
+                    if (!string.IsNullOrEmpty(Options.GainPath) && Options.CorrectGain && File.Exists(Options.GainPath))
+                        for (int d = 0; d < UsedDevices; d++)
+                            try
+                            {
+                                GPU.SetDevice(d);
+                                ImageGain[d] = StageDataLoad.LoadMap(Options.GainPath,
+                                                                     new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                                     MainWindow.Options.InputDatOffset,
+                                                                     ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+                            }
+                            catch
+                            {
+                                return;
+                            }
+
+                    Image[] VolRefFT = new Image[UsedDevices], VolMaskFT = new Image[UsedDevices];
+                    if ((Options.ProcessCTF && Options.ProcessParticleCTF) || (Options.ProcessMovement && Options.ProcessParticleShift))
+                        if (File.Exists(Options.ReferencePath) && File.Exists(Options.MaskPath))
+                        {
+                            for (int d = 0; d < UsedDevices; d++)
+                            {
+                                GPU.SetDevice(d);
+                                {
+                                    Image Volume = StageDataLoad.LoadMap(Options.ReferencePath, new int2(1, 1), 0, typeof (float));
+                                    Image VolumePadded = Volume.AsPadded(Volume.Dims * Options.ProjectionOversample);
+                                    Volume.Dispose();
+                                    VolumePadded.RemapToFT(true);
+                                    VolRefFT[d] = VolumePadded.AsFFT(true);
+                                    VolumePadded.Dispose();
+                                }
+                                {
+                                    Image Volume = StageDataLoad.LoadMap(Options.MaskPath, new int2(1, 1), 0, typeof (float));
+                                    Image VolumePadded = Volume.AsPadded(Volume.Dims * Options.ProjectionOversample);
+                                    Volume.Dispose();
+                                    VolumePadded.RemapToFT(true);
+                                    VolMaskFT[d] = VolumePadded.AsFFT(true);
+                                    VolumePadded.Dispose();
+                                }
+                            }
+                        }
+
+                    Star ParticlesStar = null;
+                    if (File.Exists(Options.DataStarPath))
+                        ParticlesStar = new Star(Options.DataStarPath);
+
+                    Queue<DeviceToken> Devices = new Queue<DeviceToken>();
+                    for (int d = 0; d < UsedDevices; d++)
+                        Devices.Enqueue(new DeviceToken(d));
+                    for (int d = 0; d < UsedDevices; d++)
+                        Devices.Enqueue(new DeviceToken(d));
+                    int NTokens = Devices.Count;
+
+                    DeviceToken[] IOSync = new DeviceToken[UsedDevices];
+                    for (int d = 0; d < UsedDevices; d++)
+                        IOSync[d] = new DeviceToken(d);
+
+                    foreach (var Movie in Options.Movies)
+                    {
+                        if (!IsProcessing)
+                            break;
+
+                        if (Movie.Status != ProcessingStatus.Skip && Movie.Status != ProcessingStatus.Processed)
+                        {
+                            while (Devices.Count <= 0)
+                                Thread.Sleep(20);
+
+                            if (!IsProcessing)
+                                break;
+
+                            DeviceToken CurrentDevice;
+                            lock (Devices)
+                                CurrentDevice = Devices.Dequeue();
+
+                            Thread DeviceThread = new Thread(() =>
+                            {
+                                GPU.SetDevice(CurrentDevice.ID);
+
+                                MapHeader OriginalHeader = null;
+                                Image OriginalStack = null;
+                                decimal ScaleFactor = 1M / (decimal)Math.Pow(2, (double)Options.PostBinTimes);
+
+                                lock (IOSync[CurrentDevice.ID])
+                                    PrepareHeaderAndMap(Movie.Path, ImageGain[CurrentDevice.ID], ScaleFactor, out OriginalHeader, out OriginalStack);
+                                /*OriginalHeader = MapHeader.ReadFromFile(Movie.Path,
+                                                                    new int2(Options.InputDatWidth, Options.InputDatHeight),
+                                                                    Options.InputDatOffset,
+                                                                    ImageFormatsHelper.StringToType(Options.InputDatType));*/
+
+                                //try
+                                {
+                                    if (Options.ProcessMovement)
+                                    {
+                                        if (!Options.ProcessParticleShift)
+                                            Movie.ProcessShift(OriginalHeader, OriginalStack, ScaleFactor);
+                                        else
+                                            Movie.ProcessParticleShift(OriginalHeader,
+                                                                       OriginalStack,
+                                                                       ParticlesStar,
+                                                                       VolRefFT[CurrentDevice.ID],
+                                                                       VolMaskFT[CurrentDevice.ID],
+                                                                       VolRefFT[CurrentDevice.ID].Dims.X / Options.ProjectionOversample,
+                                                                       ScaleFactor);
+                                    }
+                                    if (Options.ProcessCTF)
+                                    {
+                                        if (!Options.ProcessParticleCTF)
+                                            Movie.ProcessCTF(OriginalHeader, OriginalStack, true, ScaleFactor);
+                                        else
+                                            Movie.ProcessParticleCTF(OriginalHeader,
+                                                                     OriginalStack,
+                                                                     ParticlesStar,
+                                                                     VolRefFT[CurrentDevice.ID],
+                                                                     VolMaskFT[CurrentDevice.ID],
+                                                                     VolRefFT[CurrentDevice.ID].Dims.X / Options.ProjectionOversample,
+                                                                     ScaleFactor);
+                                    }
+
+                                    if (Options.PostAverage || Options.PostStack)
+                                        Movie.CreateCorrected(OriginalHeader, OriginalStack);
+
+                                    //Movie.PerformComparison(OriginalHeader, ParticlesStar, VolRefFT, VolMaskFT, ScaleFactor);
+
+                                    Movie.Status = ProcessingStatus.Processed;
+                                }
+                                /*catch
+                                {
+                                    Movie.Status = ProcessingStatus.Unprocessed;
+                                }*/
+
+                                OriginalStack?.Dispose();
+
+                                lock (Devices)
+                                    Devices.Enqueue(CurrentDevice);
+                            });
+
+                            DeviceThread.Start();
+                        }
+                    }
+
+                    while (Devices.Count != NTokens)
+                        Thread.Sleep(20);
+
+                    //ParticlesStar.Save("F:\\rado27\\20S_defocused_dataset_part1\\warpmaps2\\run1_it017_data_everything.star");
+                    //MoviesStar.Save("D:\\rado27\\Refine3D\\run1_ct5_data_movies.star");
+
+                    for (int d = 0; d < UsedDevices; d++)
+                    {
+                        ImageGain[d]?.Dispose();
+                        VolRefFT[d]?.Dispose();
+                        VolMaskFT[d]?.Dispose();
+                    }
+                });
+                ProcessThread.Start();
             }
             else
             {
@@ -362,29 +582,269 @@ namespace Warp
             }
         }
 
+        private void PrepareHeaderAndMap(string path, Image imageGain, decimal scaleFactor, out MapHeader header, out Image stack)
+        {
+            header = MapHeader.ReadFromFile(path,
+                                            new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                            MainWindow.Options.InputDatOffset,
+                                            ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+
+            if (scaleFactor == 1M)
+            {
+                stack = StageDataLoad.LoadMap(path,
+                                              new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                              MainWindow.Options.InputDatOffset,
+                                              ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+
+                if (imageGain != null)
+                    stack.MultiplySlices(imageGain);
+                stack.Xray(20f);
+            }
+            else
+            {
+                int3 ScaledDims = new int3((int)Math.Round(header.Dimensions.X * scaleFactor),
+                                           (int)Math.Round(header.Dimensions.Y * scaleFactor),
+                                           header.Dimensions.Z);
+                header.Dimensions = ScaledDims;
+
+                stack = new Image(ScaledDims);
+                float[][] OriginalStackData = stack.GetHost(Intent.Write);
+
+                //Parallel.For(0, ScaledDims.Z, new ParallelOptions {MaxDegreeOfParallelism = 4}, z =>
+                for (int z = 0; z < ScaledDims.Z; z++)
+                {
+                    Image Layer = StageDataLoad.LoadMap(path,
+                                                        new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                        MainWindow.Options.InputDatOffset,
+                                                        ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType),
+                                                        z);
+                    //lock (OriginalStackData)
+                    {
+                        if (imageGain != null)
+                            Layer.MultiplySlices(imageGain);
+                        Layer.Xray(20f);
+
+                        Image ScaledLayer = Layer.AsScaledMassive(new int2(ScaledDims));
+                        Layer.Dispose();
+
+                        OriginalStackData[z] = ScaledLayer.GetHost(Intent.Read)[0];
+                        ScaledLayer.Dispose();
+                    }
+                }//);
+
+                //stack.WriteMRC("d_stack.mrc");
+            }
+        }
+
         private void ButtonExportParticles_OnClick(object sender, RoutedEventArgs e)
         {
-            
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "STAR Files|*.star",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+            if (Result == System.Windows.Forms.DialogResult.OK)
+            {
+                System.Windows.Forms.SaveFileDialog SaveDialog = new System.Windows.Forms.SaveFileDialog
+                {
+                    Filter = "STAR Files|*.star"
+                };
+                System.Windows.Forms.DialogResult SaveResult = SaveDialog.ShowDialog();
+                if (SaveResult == System.Windows.Forms.DialogResult.OK)
+                {
+                    Thread ProcessThread = new Thread(() =>
+                    {
+                        Star TableIn = new Star(Dialog.FileName);
+                        //if (TableIn.GetColumn("rlnCtfImage") == null)
+                        //    TableIn.AddColumn("rlnCtfImage");
+
+                        string[] ColumnNames = TableIn.GetColumn("rlnMicrographName");
+
+                        string[] Excluded = Options.Movies.Where(m => m.Status == ProcessingStatus.Skip).Select(m => m.RootName).ToArray();
+                        List<int> ForDelete = new List<int>();
+                        for (int r = 0; r < TableIn.RowCount; r++)
+                            for (int ex = 0; ex < Excluded.Length; ex++)
+                                if (ColumnNames[r].Contains(Excluded[ex]))
+                                    ForDelete.Add(r);
+                        TableIn.RemoveRows(ForDelete.ToArray());
+
+                        ColumnNames = TableIn.GetColumn("rlnMicrographName");
+                        string[] ColumnCoordsX = TableIn.GetColumn("rlnCoordinateX");
+                        string[] ColumnCoordsY = TableIn.GetColumn("rlnCoordinateY");
+
+                        Star TableOut = new Star(TableIn.GetColumnNames());
+
+                        Image ImageGain = null;
+                        if (!string.IsNullOrEmpty(Options.GainPath) && Options.CorrectGain)
+                            try
+                            {
+                                ImageGain = StageDataLoad.LoadMap(Options.GainPath,
+                                                                  new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                                  MainWindow.Options.InputDatOffset,
+                                                                  ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+                            }
+                            catch
+                            {
+                                return;
+                            }
+
+                        foreach (var movie in Options.Movies)
+                            if (movie.DoProcess)
+                            {
+                                MapHeader OriginalHeader = null;
+                                Image OriginalStack = null;
+                                decimal ScaleFactor = 1M / (decimal)Math.Pow(2, (double)Options.PostBinTimes);
+
+                                //PrepareHeaderAndMap(movie.Path, ImageGain, ScaleFactor, out OriginalHeader, out OriginalStack);
+
+                                //OriginalStack.WriteMRC("d_stack.mrc");
+                                movie.UpdateStarDefocus(TableIn, ColumnNames, ColumnCoordsX, ColumnCoordsY);
+                                //movie.ExportParticles(TableIn, TableOut, OriginalHeader, OriginalStack, Options.ExportParticleSize, Options.ExportParticleRadius, ScaleFactor);
+
+                                OriginalStack?.Dispose();
+                                //Debug.WriteLine(movie.Path);
+                                //TableIn.Save(SaveDialog.FileName);
+                            }
+
+                        TableIn.Save(SaveDialog.FileName);
+
+                        ImageGain?.Dispose();
+                    });
+                    ProcessThread.Start();
+                }
+            }
+        }
+
+        private void ButtonPolishParticles_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "STAR Files|*.star",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+            if (Result == System.Windows.Forms.DialogResult.OK)
+            {
+                System.Windows.Forms.SaveFileDialog SaveDialog = new System.Windows.Forms.SaveFileDialog
+                {
+                    Filter = "STAR Files|*.star"
+                };
+                System.Windows.Forms.DialogResult SaveResult = SaveDialog.ShowDialog();
+                if (SaveResult == System.Windows.Forms.DialogResult.OK)
+                {
+                    Thread ProcessThread = new Thread(() =>
+                    {
+                        Star TableIn = new Star(Dialog.FileName);
+                        if (TableIn.GetColumn("rlnCtfImage") == null)
+                            TableIn.AddColumn("rlnCtfImage");
+
+                        string[] ColumnNames = TableIn.GetColumn("rlnMicrographName");
+                        string[] ColumnCoordsX = TableIn.GetColumn("rlnCoordinateX");
+                        string[] ColumnCoordsY = TableIn.GetColumn("rlnCoordinateY");
+
+                        Star TableOut = new Star(TableIn.GetColumnNames());
+
+                        Image ImageGain = null;
+                        if (!string.IsNullOrEmpty(Options.GainPath) && Options.CorrectGain)
+                            try
+                            {
+                                ImageGain = StageDataLoad.LoadMap(Options.GainPath,
+                                                                  new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
+                                                                  MainWindow.Options.InputDatOffset,
+                                                                  ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
+                            }
+                            catch
+                            {
+                                return;
+                            }
+
+                        foreach (var movie in Options.Movies)
+                            if (movie.DoProcess)
+                            {
+                                MapHeader OriginalHeader = null;
+                                Image OriginalStack = null;
+                                decimal ScaleFactor = 1M / (decimal)Math.Pow(2, (double)Options.PostBinTimes);
+
+                                PrepareHeaderAndMap(movie.Path, ImageGain, ScaleFactor, out OriginalHeader, out OriginalStack);
+
+                                //OriginalStack.WriteMRC("d_stack.mrc");
+                                movie.UpdateStarDefocus(TableIn, ColumnNames, ColumnCoordsX, ColumnCoordsY);
+                                movie.ExportParticlesMovie(TableIn, TableOut, OriginalHeader, OriginalStack, Options.ExportParticleSize, Options.ExportParticleRadius, ScaleFactor);
+
+                                OriginalStack?.Dispose();
+                                //Debug.WriteLine(movie.Path);
+                                TableOut.Save(SaveDialog.FileName);
+                            }
+
+                        TableOut.Save(SaveDialog.FileName);
+
+                        ImageGain?.Dispose();
+                    });
+                    ProcessThread.Start();
+                }
+            }
+        }
+
+        private void ButtonExportList_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.SaveFileDialog SaveDialog = new System.Windows.Forms.SaveFileDialog
+            {
+                Filter = "STAR Files|*.star"
+            };
+            System.Windows.Forms.DialogResult SaveResult = SaveDialog.ShowDialog();
+            if (SaveResult == System.Windows.Forms.DialogResult.OK)
+            {
+                using (TextWriter Writer = File.CreateText(SaveDialog.FileName))
+                {
+                    Writer.WriteLine("");
+                    Writer.WriteLine("data_");
+                    Writer.WriteLine("");
+                    Writer.WriteLine("loop_");
+                    Writer.WriteLine("_rlnMicrographName #1");
+                    Writer.WriteLine("_rlnDefocusU #2");
+                    Writer.WriteLine("_rlnDefocusV #3");
+                    Writer.WriteLine("_rlnDefocusAngle #4");
+                    Writer.WriteLine("_rlnPhaseShift #5");
+                    Writer.WriteLine("_rlnVoltage #6");
+                    Writer.WriteLine("_rlnSphericalAberration #7");
+                    Writer.WriteLine("_rlnAmplitudeContrast #8");
+                    Writer.WriteLine("_rlnMagnification #9");
+                    Writer.WriteLine("_rlnDetectorPixelSize #10");
+                    Writer.WriteLine("_rlnCtfFigureOfMerit #11");
+                    Writer.WriteLine("_rlnCtfImage #12");
+
+                    foreach (Movie movie in Options.Movies)
+                    {
+                        if (movie.Status == ProcessingStatus.Skip)
+                            continue;
+
+                        List<string> Values = new List<string>();
+
+                        Values.Add("average/" + movie.RootName + ".mrc");
+                        Values.Add(((movie.CTF.Defocus + movie.CTF.DefocusDelta / 2M) * 1e4M).ToString(CultureInfo.InvariantCulture));
+                        Values.Add(((movie.CTF.Defocus - movie.CTF.DefocusDelta / 2M) * 1e4M).ToString(CultureInfo.InvariantCulture));
+                        Values.Add((movie.CTF.DefocusAngle).ToString(CultureInfo.InvariantCulture));
+                        Values.Add((movie.CTF.PhaseShift * 180M).ToString(CultureInfo.InvariantCulture));
+                        Values.Add(movie.CTF.Voltage.ToString(CultureInfo.InvariantCulture));
+                        Values.Add(movie.CTF.Cs.ToString(CultureInfo.InvariantCulture));
+                        Values.Add(movie.CTF.Amplitude.ToString(CultureInfo.InvariantCulture));
+                        Values.Add((Options.CTFDetectorPixel * 10000M / movie.CTF.PixelSize).ToString(CultureInfo.InvariantCulture));
+                        Values.Add(Options.CTFDetectorPixel.ToString(CultureInfo.InvariantCulture));
+                        Values.Add("1");
+                        Values.Add("spectrum/" + movie.RootName + ".mrc");
+
+                        Writer.WriteLine(string.Join("  ", Values));
+                    }
+                }
+            }
         }
 
         private void ButtonExportStatistics_OnClick(object sender, RoutedEventArgs e)
         {
-            MapHeader OriginalHeader = MapHeader.ReadFromFile(Options.DisplayedMovie?.Path,
-                                                              new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
-                                                              MainWindow.Options.InputDatOffset,
-                                                              ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
-            Image OriginalStack = StageDataLoad.LoadMap(Options.DisplayedMovie?.Path,
-                                                        new int2(MainWindow.Options.InputDatWidth, MainWindow.Options.InputDatHeight),
-                                                        MainWindow.Options.InputDatOffset,
-                                                        ImageFormatsHelper.StringToType(MainWindow.Options.InputDatType));
-
-            OriginalStack.Xray(20f);
-
-            Options.DisplayedMovie?.ProcessShift(OriginalHeader, OriginalStack);
-            Options.DisplayedMovie?.ProcessCTF(OriginalHeader, OriginalStack, true);
-            Options.DisplayedMovie?.CreateCorrected(OriginalHeader, OriginalStack, "");
-
-            OriginalStack.Dispose();
+            using (TextWriter Writer = new StreamWriter(File.Create("D:\\rubisco\\series\\defoci.txt")))
+                foreach (Movie movie in Options.Movies)
+                    Writer.WriteLine(string.Join("\t", movie.GridCTF.FlatValues));
         }
 
         #endregion
@@ -397,5 +857,65 @@ namespace Warp
         }
 
         #endregion
+
+        private void ButtonDataStarPath_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "*_data.star Files|*_data.star",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+
+            if (Result.ToString() == "OK")
+            {
+                Options.DataStarPath = Dialog.FileName;
+            }
+        }
+
+        private void ButtonModelStarPath_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "*_model.star Files|*_model.star",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+
+            if (Result.ToString() == "OK")
+            {
+                Options.ModelStarPath = Dialog.FileName;
+            }
+        }
+
+        private void ButtonReferencePath_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "3D Map Files|*.mrc;*.em;*.tif",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+
+            if (Result.ToString() == "OK")
+            {
+                Options.ReferencePath = Dialog.FileName;
+            }
+        }
+
+        private void ButtonMaskPath_OnClick(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.OpenFileDialog Dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "3D Map Files|*.mrc;*.em;*.tif",
+                Multiselect = false
+            };
+            System.Windows.Forms.DialogResult Result = Dialog.ShowDialog();
+
+            if (Result.ToString() == "OK")
+            {
+                Options.MaskPath = Dialog.FileName;
+            }
+        }
     }
 }

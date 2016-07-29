@@ -72,6 +72,13 @@ namespace Warp.Tools
             Z = z;
         }
 
+        public float3(float2 v)
+        {
+            X = v.X;
+            Y = v.Y;
+            Z = 0f;
+        }
+
         public float3(byte[] value)
         {
             X = BitConverter.ToSingle(value, 0);

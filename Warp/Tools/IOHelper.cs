@@ -45,7 +45,7 @@ namespace Warp.Tools
             return Dims;
         }
 
-        public static float[][] ReadMapFloat(string path, int2 headerlessSliceDims, long headerlessOffset, Type headerlessType)
+        public static float[][] ReadMapFloat(string path, int2 headerlessSliceDims, long headerlessOffset, Type headerlessType, int layer = -1)
         {
             MapHeader Header = null;
             Type ValueType = null;
@@ -56,60 +56,68 @@ namespace Warp.Tools
             {
                 Header = MapHeader.ReadFromFile(Reader, Info, headerlessSliceDims, headerlessOffset, headerlessType);
                 ValueType = Header.GetValueType();
-                Data = new float[Header.Dimensions.Z][];
+                Data = new float[layer < 0 ? Header.Dimensions.Z : 1][];
 
-                for (int z = 0; z < Header.Dimensions.Z; z++)
-                {
-                    byte[] Bytes = Reader.ReadBytes((int)Header.Dimensions.ElementsSlice() * (int)ImageFormatsHelper.SizeOf(ValueType));
-                    Data[z] = new float[(int)Header.Dimensions.ElementsSlice()];
-
-                    unsafe
+                if (Header.GetType() != typeof(HeaderTiff))
+                    for (int z = 0; z < Data.Length; z++)
                     {
-                        int Elements = (int)Header.Dimensions.ElementsSlice();
+                        if (layer >= 0)
+                            Reader.BaseStream.Seek((int)Header.Dimensions.ElementsSlice() * (int)ImageFormatsHelper.SizeOf(ValueType) * layer, SeekOrigin.Current);
 
-                        fixed (byte* BytesPtr = Bytes)
-                        fixed (float* DataPtr = Data[z])
+                        byte[] Bytes = Reader.ReadBytes((int)Header.Dimensions.ElementsSlice() * (int)ImageFormatsHelper.SizeOf(ValueType));
+                        Data[z] = new float[(int)Header.Dimensions.ElementsSlice()];
+
+                        unsafe
                         {
-                            float* DataP = DataPtr;
+                            int Elements = (int)Header.Dimensions.ElementsSlice();
 
-                            if (ValueType == typeof(byte))
+                            fixed (byte* BytesPtr = Bytes)
+                            fixed (float* DataPtr = Data[z])
                             {
-                                byte* BytesP = BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = (float)*BytesP++;
-                            }
-                            else if (ValueType == typeof(short))
-                            {
-                                short* BytesP = (short*)BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = (float)*BytesP++;
-                            }
-                            else if (ValueType == typeof(ushort))
-                            {
-                                ushort* BytesP = (ushort*)BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = (float)*BytesP++;
-                            }
-                            else if (ValueType == typeof(int))
-                            {
-                                int* BytesP = (int*)BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = (float)*BytesP++;
-                            }
-                            else if (ValueType == typeof(float))
-                            {
-                                float* BytesP = (float*)BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = *BytesP++;
-                            }
-                            else if (ValueType == typeof(double))
-                            {
-                                double* BytesP = (double*)BytesPtr;
-                                for (int i = 0; i < Elements; i++)
-                                    *DataP++ = (float)*BytesP++;
+                                float* DataP = DataPtr;
+
+                                if (ValueType == typeof(byte))
+                                {
+                                    byte* BytesP = BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = (float)*BytesP++;
+                                }
+                                else if (ValueType == typeof(short))
+                                {
+                                    short* BytesP = (short*)BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = (float)*BytesP++;
+                                }
+                                else if (ValueType == typeof(ushort))
+                                {
+                                    ushort* BytesP = (ushort*)BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = (float)*BytesP++;
+                                }
+                                else if (ValueType == typeof(int))
+                                {
+                                    int* BytesP = (int*)BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = (float)*BytesP++;
+                                }
+                                else if (ValueType == typeof(float))
+                                {
+                                    float* BytesP = (float*)BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = *BytesP++;
+                                }
+                                else if (ValueType == typeof(double))
+                                {
+                                    double* BytesP = (double*)BytesPtr;
+                                    for (int i = 0; i < Elements; i++)
+                                        *DataP++ = (float)*BytesP++;
+                                }
                             }
                         }
                     }
+                else
+                {
+                    Data = ((HeaderTiff)Header).ReadData(layer);
                 }
             }
 

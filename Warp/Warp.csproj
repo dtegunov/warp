@@ -22,7 +22,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>..\bin\</OutputPath>
+    <OutputPath>..\bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -47,6 +47,10 @@
     </Reference>
     <Reference Include="Accord.Math, Version=3.0.2.0, Culture=neutral, PublicKeyToken=fa1a88e29555ccf7, processorArchitecture=MSIL">
       <HintPath>..\packages\Accord.Math.3.0.2\lib\net45\Accord.Math.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="BitMiracle.LibTiff.NET, Version=2.4.528.0, Culture=neutral, PublicKeyToken=53879b3e20e7a7d6, processorArchitecture=MSIL">
+      <HintPath>..\packages\BitMiracle.LibTiff.NET.2.4.528.0\lib\net20\BitMiracle.LibTiff.NET.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
@@ -84,6 +88,9 @@
     <Compile Include="Controls\GridMiniature.xaml.cs">
       <DependentUpon>GridMiniature.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\MicrographDisplay.xaml.cs">
+      <DependentUpon>MicrographDisplay.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\StatusBar.xaml.cs">
       <DependentUpon>StatusBar.xaml</DependentUpon>
     </Compile>
@@ -96,13 +103,17 @@
     <Compile Include="Headers\EM.cs" />
     <Compile Include="Headers\MRC.cs" />
     <Compile Include="Headers\Raw.cs" />
+    <Compile Include="Headers\Tiff.cs" />
     <Compile Include="Image.cs" />
     <Compile Include="Movie.cs" />
     <Compile Include="Options.cs" />
     <Compile Include="Controls\ValueSlider.xaml.cs">
       <DependentUpon>ValueSlider.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ProcessingOptions.cs" />
     <Compile Include="Stages\StageDataLoad.cs" />
+    <Compile Include="Star.cs" />
+    <Compile Include="TiltSeries.cs" />
     <Compile Include="Tools\FloatVectors.cs" />
     <Compile Include="Tools\IntVectors.cs" />
     <Compile Include="Tools\IOHelper.cs" />
@@ -121,6 +132,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Controls\GridMiniature.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\MicrographDisplay.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

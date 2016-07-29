@@ -150,21 +150,18 @@ namespace Warp
             return result;
         }
 
-        public float[] GetInterpolated(int3 valueGrid, float3 overlapFraction)
+        public float[] GetInterpolated(int3 valueGrid, float3 border)
         {
-            overlapFraction = new float3(1f - overlapFraction.X, 1f - overlapFraction.Y, 1f - overlapFraction.Z);
             float[] Result = new float[valueGrid.Elements()];
+            
+            float StepX = (1f - border.X * 2) / Math.Max(1, valueGrid.X - 1);
+            float OffsetX = border.X;
+            
+            float StepY = (1f - border.Y * 2) / Math.Max(1, valueGrid.Y - 1);
+            float OffsetY = border.Y;
 
-            float OverallStepsX = 1f + (valueGrid.X - 1) / overlapFraction.X;
-            float StepX = 1f / OverallStepsX;
-            float OffsetX = StepX / overlapFraction.X * 0.5f;
-
-            float OverallStepsY = 1f + (valueGrid.Y - 1) / overlapFraction.Y;
-            float StepY = 1f / OverallStepsY;
-            float OffsetY = StepY / overlapFraction.Y * 0.5f;
-
-            float StepZ = 1f / Math.Max(valueGrid.Z - 1, 1);
-            float OffsetZ = valueGrid.Z == 1 ? 0.5f : 0f;
+            float StepZ = (1f - border.Z * 2) / Math.Max(valueGrid.Z - 1, 1);
+            float OffsetZ = valueGrid.Z == 1 ? 0.5f : border.Z;
             
             for (int z = 0, i = 0; z < valueGrid.Z; z++)
                 for (int y = 0; y < valueGrid.Y; y++)
@@ -174,23 +171,29 @@ namespace Warp
             return Result;
         }
 
-        public float[] GetInterpolatedNative(int3 valueGrid, float3 overlapFraction)
+        public float[] GetInterpolatedNative(int3 valueGrid, float3 border)
         {
-            overlapFraction = new float3(1f - overlapFraction.X, 1f - overlapFraction.Y, 1f - overlapFraction.Z);
             float[] Result = new float[valueGrid.Elements()];
 
-            float OverallStepsX = 1f + (valueGrid.X - 1) / overlapFraction.X;
-            float StepX = 1f / OverallStepsX;
-            float OffsetX = StepX / overlapFraction.X * 0.5f;
+            float StepX = (1f - border.X * 2) / Math.Max(1, valueGrid.X - 1);
+            float OffsetX = border.X;
 
-            float OverallStepsY = 1f + (valueGrid.Y - 1) / overlapFraction.Y;
-            float StepY = 1f / OverallStepsY;
-            float OffsetY = StepY / overlapFraction.Y * 0.5f;
-            
-            float StepZ = 1f / Math.Max(valueGrid.Z - 1, 1);
-            float OffsetZ = valueGrid.Z == 1 ? 0.5f : 0f;
+            float StepY = (1f - border.Y * 2) / Math.Max(1, valueGrid.Y - 1);
+            float OffsetY = border.Y;
+
+            float StepZ = (1f - border.Z * 2) / Math.Max(valueGrid.Z - 1, 1);
+            float OffsetZ = valueGrid.Z == 1 ? 0.5f : border.Z;
 
             CPU.CubicInterpOnGrid(Dimensions, FlatValues, Spacing, valueGrid, new float3(StepX, StepY, StepZ), new float3(OffsetX, OffsetY, OffsetZ), Result);
+
+            return Result;
+        }
+
+        public float[] GetInterpolatedNative(float3[] positions)
+        {
+            float[] Result = new float[positions.Length];
+
+            CPU.CubicInterpIrregular(Dimensions, FlatValues, Helper.ToInterleaved(positions), positions.Length, Spacing, Result);
 
             return Result;
         }
@@ -247,7 +250,7 @@ namespace Warp
             return new CubicGrid(Dimensions.Slice(), Collapsed);
         }
 
-        public float[][] GetWiggleWeights(int3 valueGrid, float3 overlapFraction)
+        public float[][] GetWiggleWeights(int3 valueGrid, float3 border)
         {
             float[][] Result = new float[Dimensions.Elements()][];
 
@@ -257,8 +260,26 @@ namespace Warp
                 PlusValues[i] = 1f;
                 CubicGrid PlusGrid = new CubicGrid(Dimensions, PlusValues);
 
-                Result[i] = PlusGrid.GetInterpolatedNative(valueGrid, overlapFraction);
+                Result[i] = PlusGrid.GetInterpolatedNative(valueGrid, border);
             }
+
+            return Result;
+        }
+
+        public float[][] GetWiggleWeights(float3[] positions)
+        {
+            float[][] Result = new float[Dimensions.Elements()][];
+
+            Parallel.For(0, Result.Length, i =>
+            {
+                float[] PlusValues = new float[Dimensions.Elements()];
+                PlusValues[i] = 1f;
+                CubicGrid PlusGrid = new CubicGrid(Dimensions, PlusValues);
+
+                Result[i] = new float[positions.Length];
+                for (int p = 0; p < positions.Length; p++)
+                    Result[i][p] = PlusGrid.GetInterpolated(positions[p]);
+            });
 
             return Result;
         }

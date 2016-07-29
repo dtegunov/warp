@@ -137,6 +137,15 @@ namespace Warp.Tools
             return D;
         }
 
+        public static double[] Diff(double[] data)
+        {
+            double[] D = new double[data.Length - 1];
+            for (int i = 0; i < data.Length - 1; i++)
+                D[i] = data[i + 1] - data[i];
+
+            return D;
+        }
+
         public static int NextMultipleOf(int value, int factor)
         {
             return ((value + factor - 1) / factor) * factor;
@@ -163,9 +172,32 @@ namespace Warp.Tools
             }
 
             if (Math.Abs(Weightsum) > 1e-6f)
-                return Sum / Weightsum;
+                return Sum;// / Weightsum;
             else
                 return Sum;
+        }
+
+        public static void UnNaN(float[] data)
+        {
+            for (int i = 0; i < data.Length; i++)
+                if (float.IsNaN(data[i]))
+                    data[i] = 0;
+        }
+
+        public static void UnNaN(float2[] data)
+        {
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (float.IsNaN(data[i].X))
+                    data[i].X = 0;
+                if (float.IsNaN(data[i].Y))
+                    data[i].Y = 0;
+            }
+        }
+
+        public static float ResidualFraction(float value)
+        {
+            return value - (int)value;
         }
     }
 }
