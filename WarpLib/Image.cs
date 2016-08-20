@@ -45,7 +45,7 @@ namespace Warp
                 if (_DeviceData == IntPtr.Zero)
                 {
                     _DeviceData = !IsHalf ? GPU.MallocDevice(ElementsReal) : GPU.MallocDeviceHalf(ElementsReal);
-                    MainWindow.Options.UpdateGPUStats();
+                    GPU.OnMemoryChanged();
                 }
 
                 return _DeviceData;
@@ -161,7 +161,7 @@ namespace Warp
             IsHalf = ishalf;
 
             _DeviceData = !IsHalf ? GPU.MallocDevice(ElementsReal) : GPU.MallocDeviceHalf(ElementsReal);
-            MainWindow.Options.UpdateGPUStats();
+            GPU.OnMemoryChanged();
             if (deviceData != IntPtr.Zero)
             {
                 if (!IsHalf)
@@ -188,7 +188,10 @@ namespace Warp
                 }
 
                 if ((intent & Intent.Write) > 0)
+                {
                     IsDeviceDirty = true;
+                    IsHostDirty = false;
+                }
 
                 return DeviceData;
             }
@@ -218,7 +221,10 @@ namespace Warp
                 }
 
                 if ((intent & Intent.Write) > 0)
+                {
                     IsHostDirty = true;
+                    IsDeviceDirty = false;
+                }
 
                 return HostData;
             }
@@ -266,6 +272,30 @@ namespace Warp
             }
         }
 
+        public float[] GetHostContinuousCopy()
+        {
+            float[] Continuous = new float[ElementsReal];
+            float[][] Data = GetHost(Intent.Read);
+            unsafe
+            {
+                fixed (float* ContinuousPtr = Continuous)
+                {
+                    float* ContinuousP = ContinuousPtr;
+                    for (int i = 0; i < Data.Length; i++)
+                    {
+                        fixed (float* DataPtr = Data[i])
+                        {
+                            float* DataP = DataPtr;
+                            for (int j = 0; j < Data[i].Length; j++)
+                                *ContinuousP++ = *DataP++;
+                        }
+                    }
+                }
+            }
+
+            return Continuous;
+        }
+
         public void FreeDevice()
         {
             lock (Sync)
@@ -279,7 +309,7 @@ namespace Warp
                             else
                                 GPU.CopyDeviceHalfToHost(new IntPtr((long)DeviceData + ElementsSliceReal * z * sizeof(short)), HostData[z], ElementsSliceReal);
                     GPU.FreeDevice(DeviceData);
-                    MainWindow.Options.UpdateGPUStats();
+                    GPU.OnMemoryChanged();
                     _DeviceData = IntPtr.Zero;
                     IsDeviceDirty = false;
                 }
@@ -320,7 +350,7 @@ namespace Warp
                 if (_DeviceData != IntPtr.Zero)
                 {
                     GPU.FreeDevice(_DeviceData);
-                    MainWindow.Options.UpdateGPUStats();
+                    GPU.OnMemoryChanged();
                     _DeviceData = IntPtr.Zero;
                     IsDeviceDirty = false;
                 }
@@ -354,12 +384,12 @@ namespace Warp
             if (IsHalf)
             {
                 IntPtr Temp = GPU.MallocDevice(ElementsReal);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Temp, ElementsReal);
 
                 Result = new Image(Temp, Dims, IsFT, IsComplex, false);
                 GPU.FreeDevice(Temp);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
             }
             else
             {
@@ -958,7 +988,7 @@ namespace Warp
             else
             {
                 Data = GPU.MallocDevice(ElementsReal);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
             
@@ -972,7 +1002,7 @@ namespace Warp
             {
                 GPU.SingleToHalf(Data, GetDevice(Intent.Write), ElementsReal);
                 GPU.FreeDevice(Data);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
             }
         }
 
@@ -987,7 +1017,7 @@ namespace Warp
             else
             {
                 Data = GPU.MallocDevice(ElementsReal);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
 
@@ -1002,8 +1032,16 @@ namespace Warp
             {
                 GPU.SingleToHalf(Data, GetDevice(Intent.Write), ElementsReal);
                 GPU.FreeDevice(Data);
-                MainWindow.Options.UpdateGPUStats();
+                GPU.OnMemoryChanged();
             }
+        }
+
+        public void Bandpass(float nyquistLow, float nyquistHigh, bool isVolume)
+        {
+            if (IsComplex || IsHalf || IsFT)
+                throw new Exception("Bandpass only works on single precision, real data");
+
+            GPU.Bandpass(GetDevice(Intent.Read), GetDevice(Intent.Write), isVolume ? Dims : Dims.Slice(), nyquistLow, nyquistHigh, isVolume ? 1 : (uint)Dims.Z);
         }
     }
     

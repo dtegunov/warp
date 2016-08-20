@@ -279,6 +279,10 @@ extern "C" __declspec(dllexport) void PolishingGetDiff(float2* d_phase,
                                                         uint npositions,
                                                         uint nframes);
 
+// Projector.cpp:
+extern "C" __declspec(dllexport) void InitProjector(int3 dims, int oversampling, float* data, float* datasize);
+extern "C" __declspec(dllexport) void BackprojectorReconstruct(int3 dimsori, int oversampling, float* h_data, float* h_weights, char* c_symmetry, bool do_reconstruct_ctf, float* h_reconstruction);
+
 // Tools.cu:
 
 extern "C" __declspec(dllexport) void Extract(float* d_input,
@@ -382,5 +386,9 @@ extern "C" __declspec(dllexport) void DivideComplexSlicesByScalar(float2* d_inpu
 extern "C" __declspec(dllexport) void Scale(float* d_input, float* d_output, int3 dimsinput, int3 dimsoutput, uint batch);
 
 extern "C" __declspec(dllexport) void ProjectForward(float2* d_inputft, float2* d_outputft, int3 dimsinput, int2 dimsoutput, float3* h_angles, float supersample, uint batch);
+
+extern "C" __declspec(dllexport) void ProjectBackward(float2* d_volumeft, float* d_volumeweights, int3 dimsvolume, float2* d_projft, float* d_projweights, int2 dimsproj, int rmax, float3* h_angles, float supersample, uint batch);
+
+extern "C" __declspec(dllexport) void Bandpass(float* d_input, float* d_output, int3 dims, float nyquistlow, float nyquisthigh, uint batch);
 
 #endif

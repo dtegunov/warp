@@ -91,7 +91,7 @@ __declspec(dllexport) void Normalize(float* d_ps, float* d_output, uint length, 
 
 __declspec(dllexport) void CreateCTF(float* d_output, float2* d_coords, uint length, CTFParams* h_params, bool amplitudesquared, uint batch)
 {
-	d_CTFSimulate(h_params, d_coords, d_output, length, amplitudesquared, batch);
+	d_CTFSimulate(h_params, d_coords, d_output, length, amplitudesquared, true, batch);
 }
 
 __declspec(dllexport) void Resize(float* d_input, int3 dimsinput, float* d_output, int3 dimsoutput, uint batch)
@@ -189,4 +189,25 @@ __declspec(dllexport) void Scale(float* d_input, float* d_output, int3 dimsinput
 __declspec(dllexport) void ProjectForward(float2* d_inputft, float2* d_outputft, int3 dimsinput, int2 dimsoutput, float3* h_angles, float supersample, uint batch)
 {
     d_rlnProject(d_inputft, dimsinput, d_outputft, toInt3(dimsoutput), (tfloat3*)h_angles, supersample, batch);
+}
+
+__declspec(dllexport) void ProjectBackward(float2* d_volumeft, float* d_volumeweights, int3 dimsvolume, float2* d_projft, float* d_projweights, int2 dimsproj, int rmax, float3* h_angles, float supersample, uint batch)
+{
+	/*tfloat* d_amps = CudaMallocValueFilled(ElementsFFT(dimsvolume), (tfloat)0);
+	d_Abs(d_projft, d_amps, ElementsFFT2(dimsproj));
+	d_WriteMRC(d_amps, toInt3FFT(dimsproj), "d_amps.mrc");
+
+	d_WriteMRC(d_projweights, toInt3(dimsproj.x / 2 + 1, dimsproj.y, batch), "d_projweights.mrc");
+
+	tfloat* d_dummy = CudaMallocValueFilled(ElementsFFT2(dimsproj) * batch * 2, 1.0f);*/
+
+    d_rlnBackproject(d_volumeft, d_volumeweights, dimsvolume, d_projft, d_projweights, toInt3(dimsproj), rmax, (tfloat3*)h_angles, supersample, batch);
+
+	/*d_Abs(d_volumeft, d_amps, ElementsFFT(dimsvolume));
+	d_WriteMRC(d_amps, toInt3FFT(dimsvolume), "d_volamps.mrc");*/
+}
+
+__declspec(dllexport) void Bandpass(float* d_input, float* d_output, int3 dims, float nyquistlow, float nyquisthigh, uint batch)
+{
+    d_BandpassNonCubic(d_input, d_output, dims, nyquistlow, nyquisthigh, batch);
 }

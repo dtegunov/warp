@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -79,6 +80,8 @@ namespace Warp
             set { if (value != _GridAngleZ) { _GridAngleZ = value; OnPropertyChanged(); } }
         }
 
+        public int3 VolumeDimensions;
+
         public float[] Angles = { 0 };
         public float[] Dose = { 0 };
 
@@ -103,6 +106,23 @@ namespace Warp
                     Sorted.Add(i);
 
                 Sorted.Sort((a, b) => Angles[a].CompareTo(Angles[b]));
+
+                return Sorted.ToArray();
+            }
+        }
+
+        public int[] IndicesSortedAbsoluteAngle
+        {
+            get
+            {
+                if (Angles == null)
+                    return null;
+
+                List<int> Sorted = new List<int>(Angles.Length);
+                for (int i = 0; i < Angles.Length; i++)
+                    Sorted.Add(i);
+
+                Sorted.Sort((a, b) => Math.Abs(Angles[a]).CompareTo(Math.Abs(Angles[b])));
 
                 return Sorted.ToArray();
             }
@@ -191,19 +211,243 @@ namespace Warp
             }
         }
 
+        public override void ProcessCTF(MapHeader originalHeader, Image originalStack, bool doastigmatism, decimal scaleFactor)
+        {
+            AreAnglesInverted = false;
+            float LastFittedAngle = 9999f;
+            float AverageDose = Dose[IndicesSortedDose.Last()] / NTilts;
+            List<int> ProcessedIndices = new List<int>();
+
+            CTF[] FitCTF = new CTF[NTilts];
+            CubicGrid[] FitGrids = new CubicGrid[NTilts];
+            float2[][] FitPS1D = new float2[NTilts][];
+            Cubic1D[] FitBackground = new Cubic1D[NTilts];
+            Cubic1D[] FitScale = new Cubic1D[NTilts];
+            Image[] FitPS2D = new Image[NTilts];
+
+            float[][] StackData = originalStack.GetHost(Intent.Read);
+
+            #region Get astigmatism from lower tilts
+
+            List<float> AstigmatismDeltas = new List<float>();
+            List<float> AstigmatismAngles = new List<float>();
+
+            for (int i = 0; i < Math.Min(NTilts, 6); i++)
+            {
+                int AngleID = IndicesSortedAbsoluteAngle[i];
+                Image AngleImage = new Image(StackData[AngleID], originalStack.Dims.Slice());
+
+                int BestPrevious = -1;
+                if (Math.Abs(LastFittedAngle - Angles[AngleID]) <= 5.1f)
+                    BestPrevious = IndicesSortedAbsoluteAngle[i - 1];
+                else if (ProcessedIndices.Count > 0)
+                {
+                    List<int> SortedProcessed = new List<int>(ProcessedIndices);
+                    SortedProcessed.Sort((a, b) => Math.Abs(Angles[AngleID] - Angles[a]).CompareTo(Math.Abs(Angles[AngleID] - Angles[b])));
+                    if (Math.Abs(Dose[SortedProcessed.First()] - Dose[AngleID]) < AverageDose * 5f)
+                        BestPrevious = SortedProcessed.First();
+                }
+
+                CTF ThisCTF;
+                CubicGrid ThisGrid;
+                float2[] ThisPS1D;
+                Cubic1D ThisBackground, ThisScale;
+                Image ThisPS2D;
+
+                CTF PrevCTF = BestPrevious >= 0 ? FitCTF[BestPrevious] : null;
+                CubicGrid PrevGrid = BestPrevious >= 0 ? FitGrids[BestPrevious] : null;
+                Cubic1D PrevBackground = BestPrevious >= 0 ? FitBackground[BestPrevious] : null;
+                Cubic1D PrevScale = BestPrevious >= 0 ? FitScale[BestPrevious] : null;
+
+                ProcessCTFOneAngle(AngleImage,
+                                   Angles[AngleID],
+                                   BestPrevious < 0,
+                                   false,
+                                   new float2(0, 0), 
+                                   PrevCTF,
+                                   PrevGrid,
+                                   PrevBackground,
+                                   PrevScale,
+                                   out ThisCTF,
+                                   out ThisGrid,
+                                   out ThisPS1D,
+                                   out ThisBackground,
+                                   out ThisScale,
+                                   out ThisPS2D);
+                AngleImage.Dispose();
+
+                FitCTF[AngleID] = ThisCTF;
+                FitGrids[AngleID] = ThisGrid;
+                FitPS1D[AngleID] = ThisPS1D;
+                FitBackground[AngleID] = ThisBackground;
+                FitScale[AngleID] = ThisScale;
+                FitPS2D[AngleID] = ThisPS2D;
+
+                LastFittedAngle = Angles[AngleID];
+                ProcessedIndices.Add(AngleID);
+
+                AstigmatismDeltas.Add((float)ThisCTF.DefocusDelta);
+                AstigmatismAngles.Add((float)ThisCTF.DefocusAngle);
+            }
+
+            ProcessedIndices.Clear();
+            LastFittedAngle = 9999;
+            float MeanAstigmatismDelta = MathHelper.Mean(MathHelper.WithinNStdFromMedian(AstigmatismDeltas.ToArray(), 1f));
+            float MeanAstigmatismAngle = MathHelper.Mean(MathHelper.WithinNStdFromMedian(AstigmatismAngles.ToArray(), 1f));
+
+            #endregion
+
+            #region Fit every tilt
+
+            for (int i = 0; i < NTilts; i++)
+            {
+                int AngleID = IndicesSortedDose[i];
+                Image AngleImage = new Image(StackData[AngleID], originalStack.Dims.Slice());
+
+                int BestPrevious = -1;
+                if (Math.Abs(LastFittedAngle - Angles[AngleID]) <= 5.1f)
+                    BestPrevious = IndicesSortedDose[i - 1];
+                else if (ProcessedIndices.Count > 0)
+                {
+                    List<int> SortedProcessed = new List<int>(ProcessedIndices);
+                    SortedProcessed.Sort((a, b) => Math.Abs(Angles[AngleID] - Angles[a]).CompareTo(Math.Abs(Angles[AngleID] - Angles[b])));
+                    if (Math.Abs(Dose[SortedProcessed.First()] - Dose[AngleID]) < AverageDose * 5f)
+                        BestPrevious = SortedProcessed.First();
+                }
+
+                CTF ThisCTF;
+                CubicGrid ThisGrid;
+                float2[] ThisPS1D;
+                Cubic1D ThisBackground, ThisScale;
+                Image ThisPS2D;
+
+                CTF PrevCTF = BestPrevious >= 0 ? FitCTF[BestPrevious] : null;
+                CubicGrid PrevGrid = BestPrevious >= 0 ? FitGrids[BestPrevious] : null;
+                Cubic1D PrevBackground = BestPrevious >= 0 ? FitBackground[BestPrevious] : null;
+                Cubic1D PrevScale = BestPrevious >= 0 ? FitScale[BestPrevious] : null;
+
+                ProcessCTFOneAngle(AngleImage,
+                                   Angles[AngleID],
+                                   BestPrevious < 0,
+                                   true,
+                                   new float2(MeanAstigmatismDelta, MeanAstigmatismAngle), 
+                                   PrevCTF,
+                                   PrevGrid,
+                                   PrevBackground,
+                                   PrevScale,
+                                   out ThisCTF,
+                                   out ThisGrid,
+                                   out ThisPS1D,
+                                   out ThisBackground,
+                                   out ThisScale,
+                                   out ThisPS2D);
+                AngleImage.Dispose();
+
+                FitCTF[AngleID] = ThisCTF;
+                FitGrids[AngleID] = ThisGrid;
+                FitPS1D[AngleID] = ThisPS1D;
+                FitBackground[AngleID] = ThisBackground;
+                FitScale[AngleID] = ThisScale;
+                FitPS2D[AngleID] = ThisPS2D;
+
+                LastFittedAngle = Angles[AngleID];
+                ProcessedIndices.Add(AngleID);
+            }
+
+            #endregion
+
+            CTF = FitCTF[IndicesSortedDose[0]];
+
+            #region Determine if angles are inverted compared to actual defocus
+
+            {
+                float[] UnbiasedAngles = FitGrids.Select(g =>
+                {
+                    float X1 = (g.FlatValues[0] + g.FlatValues[2]) * 0.5f;
+                    float X2 = (g.FlatValues[1] + g.FlatValues[3]) * 0.5f;
+                    float Delta = (X2 - X1) * 10000;
+                    float Distance = originalHeader.Dimensions.X * (float)MainWindow.Options.BinnedPixelSize;
+                    return (float)Math.Atan2(Delta, Distance) * Helper.ToDeg;
+                }).ToArray();
+
+                float Unbiased1 = 0, Unbiased2 = 0, Original1 = 0, Original2 = 0;
+                for (int i = 0; i < NTilts; i++)
+                {
+                    int ii = IndicesSortedAngle[i];
+                    if (i < NTilts / 2)
+                    {
+                        Unbiased1 += UnbiasedAngles[ii];
+                        Original1 += Angles[ii];
+                    }
+                    else
+                    {
+                        Unbiased2 += UnbiasedAngles[ii];
+                        Original2 += Angles[ii];
+                    }
+                }
+
+                if (Unbiased1 > Unbiased2)
+                    AreAnglesInverted = true;
+            }
+
+            #endregion
+
+            // Create grids for fitted CTF params
+            {
+                float[] DefocusValues = new float[NTilts];
+                float[] DeltaValues = new float[NTilts];
+                float[] AngleValues = new float[NTilts];
+                for (int i = 0; i < NTilts; i++)
+                {
+                    DefocusValues[i] = (float)FitCTF[i].Defocus;
+                    DeltaValues[i] = (float)FitCTF[i].DefocusDelta;
+                    AngleValues[i] = (float)FitCTF[i].DefocusAngle;
+                }
+
+                GridCTF = new CubicGrid(new int3(1, 1, NTilts), DefocusValues);
+                GridCTFDefocusDelta = new CubicGrid(new int3(1, 1, NTilts), DeltaValues);
+                GridCTFDefocusAngle = new CubicGrid(new int3(1, 1, NTilts), AngleValues);
+            }
+
+            // Put all 2D spectra into one stack and write it to disk for display purposes
+            {
+                Image AllPS2D = new Image(new int3(FitPS2D[0].Dims.X, FitPS2D[0].Dims.Y, NTilts));
+                float[][] AllPS2DData = AllPS2D.GetHost(Intent.Write);
+                for (int i = 0; i < NTilts; i++)
+                {
+                    AllPS2DData[i] = FitPS2D[i].GetHost(Intent.Read)[0];
+                    FitPS2D[i].Dispose();
+                }
+
+                AllPS2D.WriteMRC(PowerSpectrumPath);
+            }
+
+            // Store 1D spectrum data
+            for (int i = 0; i < NTilts; i++)
+            {
+                TiltPS1D.Add(FitPS1D[i]);
+                TiltSimulatedBackground.Add(new Cubic1D(FitBackground[i].Data.Select(v => new float2(v.X, 0)).ToArray()));
+                TiltSimulatedScale.Add(FitScale[i]);
+            }
+
+            SaveMeta();
+        }
+
         public void ProcessCTFOneAngle(Image angleImage,
-                                        float angle, 
-                                        bool fromScratch, 
-                                        CTF previousCTF, 
-                                        CubicGrid previousGrid, 
-                                        Cubic1D previousBackground, 
-                                        Cubic1D previousScale, 
-                                        out CTF thisCTF,
-                                        out CubicGrid thisGrid,
-                                        out float2[] thisPS1D,
-                                        out Cubic1D thisBackground,
-                                        out Cubic1D thisScale,
-                                        out Image thisPS2D)
+                                       float angle,
+                                       bool fromScratch,
+                                       bool fixAstigmatism,
+                                       float2 astigmatism,
+                                       CTF previousCTF,
+                                       CubicGrid previousGrid,
+                                       Cubic1D previousBackground,
+                                       Cubic1D previousScale,
+                                       out CTF thisCTF,
+                                       out CubicGrid thisGrid,
+                                       out float2[] thisPS1D,
+                                       out Cubic1D thisBackground,
+                                       out Cubic1D thisScale,
+                                       out Image thisPS2D)
         {
             CTF TempCTF = previousCTF != null ? previousCTF.GetCopy() : new CTF();
             float2[] TempPS1D = null;
@@ -220,7 +464,7 @@ namespace Warp
             int2 DimsPositionGrid;
             int3[] PositionGrid = Helper.GetEqualGridSpacing(DimsImage, new int2(DimsRegion.X, DimsRegion.Y), OverlapFraction, out DimsPositionGrid);
             int NPositions = (int)DimsPositionGrid.Elements();
-            
+
             if (previousGrid == null)
                 TempGrid = new CubicGrid(new int3(2, 2, 1));
             else
@@ -320,7 +564,7 @@ namespace Warp
 
             Action UpdateBackgroundFit = () =>
             {
-                float2[] ForPS1D = PS1D.Skip(Math.Max(5, MinFreqInclusive / 2)).ToArray();
+                float2[] ForPS1D = TempPS1D.Skip(Math.Max(5, MinFreqInclusive / 2)).ToArray();
                 Cubic1D.FitCTF(ForPS1D,
                                v => v.Select(x => TempCTF.Get1D(x / (float)TempCTF.PixelSize, true)).ToArray(),
                                TempCTF.GetZeros(),
@@ -361,7 +605,7 @@ namespace Warp
                 //CTFAverage1D.WriteMRC("CTFAverage1D.mrc");
 
                 float[] RotationalAverageData = CTFAverage1D.GetHost(Intent.Read)[0];
-                float2[] ForPS1D = new float2[PS1D.Length];
+                float2[] ForPS1D = new float2[TempPS1D.Length];
                 if (keepbackground)
                     for (int i = 0; i < ForPS1D.Length; i++)
                         ForPS1D[i] = new float2((float)i / DimsRegion.X, RotationalAverageData[i] + TempBackground.Interp((float)i / DimsRegion.X));
@@ -380,19 +624,22 @@ namespace Warp
 
             // Fit background to currently best average (not corrected for astigmatism yet).
             {
-                float2[] ForPS1D = PS1D.Skip(MinFreqInclusive).Take(Math.Max(2, NFreq / 2)).ToArray();
+                float2[] ForPS1D = TempPS1D.Skip(MinFreqInclusive).Take(Math.Max(2, NFreq / 2)).ToArray();
 
 
                 float[] CurrentBackground;
-                if (previousBackground == null)
+                //if (previousBackground == null)
                 {
                     int NumNodes = Math.Max(3, (int)((MainWindow.Options.CTFRangeMax - MainWindow.Options.CTFRangeMin) * 5M));
                     TempBackground = Cubic1D.Fit(ForPS1D, NumNodes); // This won't fit falloff and scale, because approx function is 0
 
-                    CurrentBackground = TempBackground.Interp(PS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 2).ToArray();
+                    CurrentBackground = TempBackground.Interp(TempPS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 2).ToArray();
                 }
-                else
-                    CurrentBackground = previousBackground.Interp(PS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 2).ToArray();
+                /*else
+                {
+                    CurrentBackground = previousBackground.Interp(TempPS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 2).ToArray();
+                    TempBackground = new Cubic1D(previousBackground.Data);
+                }*/
 
                 float[] Subtracted1D = new float[ForPS1D.Length];
                 for (int i = 0; i < ForPS1D.Length; i++)
@@ -430,7 +677,7 @@ namespace Warp
                             Voltage = MainWindow.Options.CTFVoltage,
                             Amplitude = MainWindow.Options.CTFAmplitude
                         };
-                        float[] SimulatedCTF = CurrentParams.Get1D(PS1D.Length, true).Skip(MinFreqInclusive).Take(Math.Max(2, NFreq / 2)).ToArray();
+                        float[] SimulatedCTF = CurrentParams.Get1D(TempPS1D.Length, true).Skip(MinFreqInclusive).Take(Math.Max(2, NFreq / 2)).ToArray();
                         MathHelper.NormalizeInPlace(SimulatedCTF);
                         float Score = MathHelper.CrossCorrelate(Subtracted1D, SimulatedCTF);
                         if (Score > BestScore)
@@ -470,7 +717,7 @@ namespace Warp
                 Image CTFMeanPolarTrimmed = CTFMean.AsPolar((uint)MinFreqInclusive, (uint)(MinFreqInclusive + NFreq / 1));
 
                 // Subtract current background.
-                Image CurrentBackground = new Image(TempBackground.Interp(PS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 1).ToArray());
+                Image CurrentBackground = new Image(TempBackground.Interp(TempPS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq / 1).ToArray());
                 CTFMeanPolarTrimmed.SubtractFromLines(CurrentBackground);
                 CurrentBackground.Dispose();
 
@@ -484,7 +731,7 @@ namespace Warp
                     PixelSizeDelta = Math.Abs(MainWindow.Options.CTFPixelMax - MainWindow.Options.CTFPixelMin),
                     PixelSizeAngle = MainWindow.Options.CTFPixelAngle,
 
-                    Defocus = TempCTF.Defocus,// (MainWindow.Options.CTFZMin + MainWindow.Options.CTFZMax) * 0.5M,
+                    Defocus = TempCTF.Defocus, // (MainWindow.Options.CTFZMin + MainWindow.Options.CTFZMax) * 0.5M,
                     DefocusDelta = 0,
                     DefocusAngle = 0,
 
@@ -523,9 +770,23 @@ namespace Warp
                 UpdateRotationalAverage(true); // This time, with the nice background.
                 UpdateBackgroundFit(); // Make the background even nicer!
             }
+            else if (previousCTF != null)
+            {
+                TempCTF.DefocusDelta = previousCTF.DefocusDelta;
+                TempCTF.DefocusAngle = previousCTF.DefocusAngle;
+            }
+
+            if (fixAstigmatism)
+            {
+                TempCTF.DefocusDelta = (decimal)astigmatism.X;
+                TempCTF.DefocusAngle = (decimal)astigmatism.Y;
+            }
 
             #endregion
-            
+
+            if (previousGrid == null)
+                TempGrid = new CubicGrid(TempGrid.Dimensions, (float)TempCTF.Defocus, (float)TempCTF.Defocus, Dimension.X);
+
 
             // Do BFGS optimization of defocus, astigmatism and phase shift,
             // using 2D simulation for comparison
@@ -536,14 +797,14 @@ namespace Warp
             for (int i = 0; i < CTFSpectraConsider.Length; i++)
                 CTFSpectraConsider[i] = true;
             int NCTFSpectraConsider = CTFSpectraConsider.Length;
-            
+
             {
                 Image CTFSpectraPolarTrimmed = CTFSpectra.AsPolar((uint)MinFreqInclusive, (uint)(MinFreqInclusive + NFreq));
                 CTFSpectra.FreeDevice(); // This will only be needed again for the final PS1D.
 
                 #region Create background and scale
 
-                float[] CurrentScale = TempScale.Interp(PS1D.Select(p => p.X).ToArray());
+                float[] CurrentScale = TempScale.Interp(TempPS1D.Select(p => p.X).ToArray());
 
                 Image CTFSpectraScale = new Image(new int3(NFreq, DimsRegion.X, 1));
                 float[] CTFSpectraScaleData = CTFSpectraScale.GetHost(Intent.Write)[0];
@@ -557,7 +818,7 @@ namespace Warp
                 //CTFSpectraScale.WriteMRC("ctfspectrascale.mrc");
 
                 // Background is just 1 line since we're in polar.
-                Image CurrentBackground = new Image(TempBackground.Interp(PS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq).ToArray());
+                Image CurrentBackground = new Image(TempBackground.Interp(TempPS1D.Select(p => p.X).ToArray()).Skip(MinFreqInclusive).Take(NFreq).ToArray());
 
                 #endregion
 
@@ -656,6 +917,9 @@ namespace Warp
                     //int StartComponent = 0;
                     for (int i = StartComponent; i < input.Length; i++)
                     {
+                        if (fixAstigmatism && i > StartComponent)
+                            continue;
+
                         double[] UpperInput = new double[input.Length];
                         input.CopyTo(UpperInput, 0);
                         UpperInput[i] += Step;
@@ -729,7 +993,7 @@ namespace Warp
                 StartParams[StartParams.Length - 1] = (double)TempCTF.DefocusAngle / 20 * (Math.PI / 180);
 
                 // Compute correlation for individual spectra, and throw away those that are >.75 sigma worse than mean.
-                
+
                 BroydenFletcherGoldfarbShanno Optimizer = new BroydenFletcherGoldfarbShanno(StartParams.Length, Eval, Gradient)
                 {
                     Past = 1,
@@ -765,7 +1029,7 @@ namespace Warp
                 CTFSpectraScaleHalf.Dispose();
 
                 #region Get nicer envelope fit
-                
+
                 {
                     {
                         Image CTFSpectraBackground = new Image(new int3(DimsRegion), true);
@@ -807,7 +1071,7 @@ namespace Warp
                         CTFSpectra.AddToSlices(CTFSpectraBackground);
 
                         float[] RotationalAverageData = CTFAverage1D.GetHost(Intent.Read)[0];
-                        float2[] ForPS1D = new float2[PS1D.Length];
+                        float2[] ForPS1D = new float2[TempPS1D.Length];
                         for (int i = 0; i < ForPS1D.Length; i++)
                             ForPS1D[i] = new float2((float)i / DimsRegion.X, (float)Math.Round(RotationalAverageData[i], 4) + TempBackground.Interp((float)i / DimsRegion.X));
                         MathHelper.UnNaN(ForPS1D);
@@ -845,14 +1109,14 @@ namespace Warp
                         int xx = DimsRegion.X / 2 - x - 1;
                         xx *= xx;
                         float r = (float)Math.Sqrt(xx + yy) / DimsRegion.X;
-                        Average2DData[y * DimsAverage.X + x] = OriginalAverageData[(y + DimsRegion.X / 2) * (DimsRegion.X / 2 + 1) + x] - SimulatedBackground.Interp(r);
+                        Average2DData[y * DimsAverage.X + x] = OriginalAverageData[(y + DimsRegion.X / 2) * (DimsRegion.X / 2 + 1) + x] - TempBackground.Interp(r);
                     }
 
                     for (int x = 0; x < DimsRegion.X / 2; x++)
                     {
                         int xx = x * x;
                         float r = (float)Math.Sqrt(xx + yy) / DimsRegion.X;
-                        Average2DData[y * DimsAverage.X + x + DimsRegion.X / 2] = OriginalAverageData[(DimsRegion.X / 2 - y) * (DimsRegion.X / 2 + 1) + (DimsRegion.X / 2 - 1 - x)] - SimulatedBackground.Interp(r);
+                        Average2DData[y * DimsAverage.X + x + DimsRegion.X / 2] = OriginalAverageData[(DimsRegion.X / 2 - y) * (DimsRegion.X / 2 + 1) + (DimsRegion.X / 2 - 1 - x)] - TempBackground.Interp(r);
                     }
                 }
 
@@ -863,7 +1127,6 @@ namespace Warp
 
             for (int i = 0; i < TempPS1D.Length; i++)
                 TempPS1D[i].Y -= TempBackground.Interp(TempPS1D[i].X);
-            TempBackground = new Cubic1D(TempBackground.Data.Select(v => new float2(v.X, 0f)).ToArray());
 
             CTFSpectra.Dispose();
             CTFMean.Dispose();
@@ -877,6 +1140,325 @@ namespace Warp
             thisGrid = TempGrid;
         }
 
+        public void ExportSubtomos(Star tableIn, Image tiltStack, int size, int3 volumeDimensions)
+        {
+            VolumeDimensions = volumeDimensions;
+
+            #region Get rows from table
+
+            List<int> RowIndices = new List<int>();
+            string[] ColumnMicrographName = tableIn.GetColumn("rlnMicrographName");
+            for (int i = 0; i < ColumnMicrographName.Length; i++)
+                if (ColumnMicrographName[i].Contains(RootName))
+                    RowIndices.Add(i);
+
+            if (RowIndices.Count == 0)
+                return;
+
+            int NParticles = RowIndices.Count;
+
+            #endregion
+
+            #region Make sure all columns and directories are there
+
+            if (!tableIn.HasColumn("rlnImageName"))
+                tableIn.AddColumn("rlnImageName");
+            if (!tableIn.HasColumn("rlnCtfImage"))
+                tableIn.AddColumn("rlnCtfImage");
+
+            if (!Directory.Exists(ParticlesDir))
+                Directory.CreateDirectory(ParticlesDir);
+            if (!Directory.Exists(ParticleCTFDir))
+                Directory.CreateDirectory(ParticleCTFDir);
+
+            #endregion
+
+            #region Get subtomo positions from table
+
+            float3[] Origins = new float3[NParticles];
+            {
+                string[] ColumnPosX = tableIn.GetColumn("rlnCoordinateX");
+                string[] ColumnPosY = tableIn.GetColumn("rlnCoordinateY");
+                string[] ColumnPosZ = tableIn.GetColumn("rlnCoordinateZ");
+                string[] ColumnOriginX = tableIn.GetColumn("rlnOriginX");
+                string[] ColumnOriginY = tableIn.GetColumn("rlnOriginY");
+                string[] ColumnOriginZ = tableIn.GetColumn("rlnOriginZ");
+
+                for (int i = 0; i < NParticles; i++)
+                {
+                    float3 Pos = new float3(float.Parse(ColumnPosX[RowIndices[i]], CultureInfo.InvariantCulture),
+                                            float.Parse(ColumnPosY[RowIndices[i]], CultureInfo.InvariantCulture),
+                                            float.Parse(ColumnPosZ[RowIndices[i]], CultureInfo.InvariantCulture));
+                    float3 Shift = new float3(float.Parse(ColumnOriginX[RowIndices[i]], CultureInfo.InvariantCulture),
+                                              float.Parse(ColumnOriginY[RowIndices[i]], CultureInfo.InvariantCulture),
+                                              float.Parse(ColumnOriginZ[RowIndices[i]], CultureInfo.InvariantCulture));
+
+                    Origins[i] = Pos - Shift;
+                    //Origins[i] *= new float3(3838f / 959f, 3710f / 927f, 4f);
+
+                    tableIn.SetRowValue(RowIndices[i], "rlnCoordinateX", Origins[i].X.ToString(CultureInfo.InvariantCulture));
+                    tableIn.SetRowValue(RowIndices[i], "rlnCoordinateY", Origins[i].Y.ToString(CultureInfo.InvariantCulture));
+                    tableIn.SetRowValue(RowIndices[i], "rlnCoordinateZ", Origins[i].Z.ToString(CultureInfo.InvariantCulture));
+                    tableIn.SetRowValue(RowIndices[i], "rlnOriginX", "0.0");
+                    tableIn.SetRowValue(RowIndices[i], "rlnOriginY", "0.0");
+                    tableIn.SetRowValue(RowIndices[i], "rlnOriginZ", "0.0");
+                }
+            }
+
+            #endregion
+
+            tiltStack.FreeDevice();
+
+            int DevicesUsed = 0;
+
+            int Nx = (tiltStack.Dims.X + 29) / 60;
+            int Ny = (tiltStack.Dims.Y + 29) / 60;
+            int Nz = (300 + 29) / 60;
+
+            Origins = new float3[Nx * Ny * Nz];
+            for (int z = 0, i = 0; z < Nz; z++)
+                for (int y = 0; y < Ny; y++)
+                    for (int x = 0; x < Nx; x++, i++)
+                        Origins[i] = new float3(x * 60 + 30, y * 60 + 30, z * 60 + 30);
+            NParticles = Origins.Length;
+            
+            Parallel.For(0, NParticles, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, p =>
+            //for (int p = 0; p < NParticles; p++)
+            {
+                lock (tiltStack)
+                {
+                    GPU.SetDevice(DevicesUsed % 2);
+                    DevicesUsed++;
+                }
+
+                Image CTFCoords = GetCTFCoords(size);
+
+                Image Subtomo, SubtomoCTF;
+                GetSubtomo(tiltStack, Origins[p], CTFCoords, out Subtomo, out SubtomoCTF);
+                Image SubtomoCropped = Subtomo.AsPadded(new int3(60, 60, 60));
+
+                SubtomoCropped.WriteMRC(ParticlesDir + RootName + "_" + p.ToString("D5") + ".mrc");
+                //SubtomoCTF.WriteMRC(ParticleCTFDir + RootName + "_" + p.ToString("D5") + ".mrc");
+                SubtomoCropped.Dispose();
+
+                lock (tableIn)
+                {
+                    //tableIn.SetRowValue(RowIndices[p], "rlnImageName", "particles/" + RootName + "_" + p.ToString("D5") + ".mrc");
+                    //tableIn.SetRowValue(RowIndices[p], "rlnCtfImage", "particlectf/" + RootName + "_" + p.ToString("D5") + ".mrc");
+
+                    //tableIn.Save("D:\\rubisco\\luisexported.star");
+                }
+
+                Subtomo?.Dispose();
+                SubtomoCTF?.Dispose();
+
+                CTFCoords.Dispose();
+
+                lock (tiltStack)
+                    DevicesUsed--;
+            });
+        }
+
+        public void GetSubtomo(Image tiltStack, float3 coords, Image ctfCoords, out Image subtomo, out Image subtomoCTF)
+        {
+            int Size = ctfCoords.Dims.X;
+            float3[] ImageAngles = GetAngleInImages(coords);
+
+            Image ImagesFT = GetSubtomoImages(tiltStack, Size, coords);
+            Image CTFs = GetSubtomoCTFs(coords, ctfCoords);
+
+            ImagesFT.Multiply(CTFs);    // Weight and phase-flip image FTs by CTF, which still has its sign here
+            CTFs.Abs();                 // CTF has to be positive from here on since image FT phases are now flipped
+
+            // CTF has to be converted to complex numbers with imag = 0, and weighted by itself
+            float2[] CTFsComplexData = new float2[CTFs.ElementsComplex];
+            float[] CTFsContinuousData = CTFs.GetHostContinuousCopy();
+            for (int i = 0; i < CTFsComplexData.Length; i++)
+                CTFsComplexData[i] = new float2(CTFsContinuousData[i] * CTFsContinuousData[i], 0);
+
+            Image CTFsComplex = new Image(CTFsComplexData, CTFs.Dims, true);
+
+            Projector ProjSubtomo = new Projector(new int3(Size, Size, Size), 2);
+            lock (GPU.Sync)
+                ProjSubtomo.BackProject(ImagesFT, CTFs, ImageAngles);
+            subtomo = ProjSubtomo.Reconstruct(false);
+            ProjSubtomo.Dispose();
+
+            //Projector ProjCTF = new Projector(new int3(Size, Size, Size), 2);
+            //lock (GPU.Sync)
+            //    ProjCTF.BackProject(CTFsComplex, CTFs, ImageAngles);
+            //subtomoCTF = ProjCTF.Reconstruct(true);
+            //ProjCTF.Dispose();
+            subtomoCTF = new Image(new int3(1, 1, 1));
+
+            ImagesFT.Dispose();
+            CTFs.Dispose();
+            CTFsComplex.Dispose();
+        }
+
+        public float3[] GetPositionInImages(float3 coords)
+        {
+            float3[] Result = new float3[NTilts];
+
+            float3 Center = new float3(VolumeDimensions.X / 2, VolumeDimensions.Y / 2, VolumeDimensions.Z / 2);
+
+            float GridStep = 1f / (NTilts - 1);
+            float3 GridCoords = new float3(coords.X / Dimensions.X, coords.Y / Dimensions.Y, 0.5f);
+            float3 Centered = coords - Center;
+
+            for (int t = 0; t < NTilts; t++)
+            {
+                float3 CurrCoords = new float3(GridCoords.X, GridCoords.Y, t * GridStep);
+
+                Matrix3 TiltMatrix = Matrix3.Euler(0, -AnglesCorrect[t] * Helper.ToRad, 0);
+                Matrix3 CorrectionMatrix = Matrix3.RotateZ(GridAngleZ.GetInterpolated(CurrCoords)) *
+                                           Matrix3.RotateY(GridAngleY.GetInterpolated(CurrCoords)) *
+                                           Matrix3.RotateX(GridAngleX.GetInterpolated(CurrCoords));
+
+                Matrix3 Rotation = TiltMatrix * CorrectionMatrix;
+
+                float3 Transformed = (Rotation * Centered) + Center;
+                Transformed.Z -= Center.Z;
+                Transformed.Z *= -1;
+
+                float3 CorrectionStage = new float3(GridMovementX.GetInterpolated(CurrCoords), GridMovementY.GetInterpolated(CurrCoords), 0);
+
+                Transformed = Transformed - CorrectionStage;
+
+                Transformed.Z *= (float)MainWindow.Options.BinnedPixelSize * 1 / 1e4f;
+                Transformed.Z += GridCTF.GetInterpolated(CurrCoords);
+
+                Result[t] = Transformed;
+            }
+
+            return Result;
+        }
+
+        public float3[] GetAngleInImages(float3 coords)
+        {
+            float3[] Result = new float3[NTilts];
+
+            float GridStep = 1f / (NTilts - 1);
+            float3 GridCoords = new float3(coords.X / Dimensions.X, coords.Y / Dimensions.Y, 0.5f);
+
+            for (int t = 0; t < NTilts; t++)
+            {
+                float3 CurrCoords = new float3(GridCoords.X, GridCoords.Y, t * GridStep);
+
+                Matrix3 TiltMatrix = Matrix3.Euler(0, -AnglesCorrect[t] * Helper.ToRad, 0);
+                Matrix3 CorrectionMatrix = Matrix3.RotateZ(GridAngleZ.GetInterpolated(CurrCoords)) *
+                                           Matrix3.RotateY(GridAngleY.GetInterpolated(CurrCoords)) *
+                                           Matrix3.RotateX(GridAngleX.GetInterpolated(CurrCoords));
+
+                Matrix3 Rotation = TiltMatrix * CorrectionMatrix;
+
+                Result[t] = Matrix3.EulerFromMatrix(Rotation);
+            }
+
+            return Result;
+        }
+
+        public Image GetSubtomoImages(Image tiltStack, int size, float3 coords)
+        {
+            float3[] ImagePositions = GetPositionInImages(coords);
+
+            Image Result = new Image(new int3(size, size, NTilts));
+            float[][] ResultData = Result.GetHost(Intent.Write);
+            float3[] Shifts = new float3[NTilts];
+
+            int3 DimsStack = tiltStack.Dims;
+
+            for (int t = 0; t < NTilts; t++)
+            {
+                int2 IntPosition = new int2((int)ImagePositions[t].X - size / 2, (int)ImagePositions[t].Y - size / 2);
+                float2 Residual = new float2(-(ImagePositions[t].X - size / 2 - IntPosition.X), -(ImagePositions[t].Y - size / 2 - IntPosition.Y));
+                Residual -= size / 2;
+                Shifts[t] = new float3(Residual);
+
+                float[] OriginalData = tiltStack.GetHost(Intent.Read)[t];
+
+                float[] ImageData = ResultData[t];
+                for (int y = 0; y < size; y++)
+                {
+                    int PosY = (y + IntPosition.Y + DimsStack.Y) % DimsStack.Y;
+                    for (int x = 0; x < size; x++)
+                    {
+                        int PosX = (x + IntPosition.X + DimsStack.X) % DimsStack.X;
+                        ImageData[y * size + x] = OriginalData[PosY * DimsStack.X + PosX];
+                    }
+                }
+            }
+
+            GPU.NormParticles(Result.GetDevice(Intent.Read),
+                              Result.GetDevice(Intent.Write),
+                              Result.Dims.Slice(),
+                              (uint)MainWindow.Options.ExportParticleRadius,
+                              true,
+                              (uint)NTilts);
+
+            Result.ShiftSlices(Shifts);
+
+            Image ResultFT = Result.AsFFT();
+            Result.Dispose();
+
+            return ResultFT;
+        }
+
+        public Image GetSubtomoCTFs(float3 coords, Image ctfCoords)
+        {
+            float3[] ImagePositions = GetPositionInImages(coords);
+
+            float GridStep = 1f / (NTilts - 1);
+            CTFStruct[] Params = new CTFStruct[NTilts];
+            for (int t = 0; t < NTilts; t++)
+            {
+                decimal Defocus = (decimal)ImagePositions[t].Z;
+                decimal DefocusDelta = (decimal)GridCTFDefocusDelta.GetInterpolated(new float3(0.5f, 0.5f, t * GridStep));
+                decimal DefocusAngle = (decimal)GridCTFDefocusAngle.GetInterpolated(new float3(0.5f, 0.5f, t * GridStep));
+
+                CTF CurrCTF = CTF.GetCopy();
+                CurrCTF.Defocus = Defocus;
+                CurrCTF.DefocusDelta = DefocusDelta;
+                CurrCTF.DefocusAngle = DefocusAngle;
+                CurrCTF.PixelSize *= 4;
+                //CurrCTF.Scale = (decimal)Math.Cos(Angles[t] * Helper.ToRad);
+                //CurrCTF.Bfactor = (decimal)-Dose[t] * 8;
+
+                Params[t] = CurrCTF.ToStruct();
+            }
+
+            Image Result = new Image(IntPtr.Zero, new int3(ctfCoords.Dims.X, ctfCoords.Dims.Y, NTilts), true);
+            GPU.CreateCTF(Result.GetDevice(Intent.Write), ctfCoords.GetDevice(Intent.Read), (uint)Result.ElementsSliceReal, Params, false, (uint)NTilts);
+
+            return Result;
+        }
+
+        public Image GetCTFCoords(int size)
+        {
+            float PixelSize = (float)MainWindow.Options.BinnedPixelSize;
+            Image CTFCoords;
+            {
+                float2[] CTFCoordsData = new float2[(size / 2 + 1) * size];
+                for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size / 2 + 1; x++)
+                    {
+                        int xx = x;
+                        int yy = y < size / 2 + 1 ? y : y - size;
+
+                        float xs = xx / (float)size;
+                        float ys = yy / (float)size;
+                        float r = (float)Math.Sqrt(xs * xs + ys * ys);
+                        float angle = (float)(Math.Atan2(yy, xx));
+
+                        CTFCoordsData[y * (size / 2 + 1) + x] = new float2(r, angle);
+                    }
+
+                CTFCoords = new Image(CTFCoordsData, new int3(size, size, 1), true);
+            }
+
+            return CTFCoords;
+        }
+
         public override void LoadMeta()
         {
             if (!File.Exists(XMLPath))
@@ -888,32 +1470,6 @@ namespace Warp
                 XPathNavigator Reader = Doc.CreateNavigator();
                 Reader.MoveToRoot();
                 Reader.MoveToFirstChild();
-
-                {
-                    string StatusString = Reader.GetAttribute("Status", "");
-                    if (StatusString != null && StatusString.Length > 0)
-                    {
-                        switch (StatusString)
-                        {
-                            case "Processed":
-                                Status = ProcessingStatus.Processed;
-                                break;
-                            case "Outdated":
-                                Status = ProcessingStatus.Outdated;
-                                break;
-                            case "Unprocessed":
-                                Status = ProcessingStatus.Unprocessed;
-                                break;
-                            case "Skip":
-                                Status = ProcessingStatus.Skip;
-                                break;
-                        }
-                    }
-
-                    string AnglesInvertedString = Reader.GetAttribute("AreAnglesInverted", "");
-                    if (AnglesInvertedString != null && AnglesInvertedString.Length > 0)
-                        AreAnglesInverted = bool.Parse(AnglesInvertedString);
-                }
 
                 XPathNavigator NavAngles = Reader.SelectSingleNode("//Angles");
                 if (NavAngles != null)
@@ -1022,6 +1578,32 @@ namespace Warp
                 XPathNavigator NavAngleZ = Reader.SelectSingleNode("//GridAngleZ");
                 if (NavAngleZ != null)
                     GridAngleZ = CubicGrid.Load(NavAngleZ);
+
+                {
+                    string StatusString = Reader.GetAttribute("Status", "");
+                    if (!string.IsNullOrEmpty(StatusString))
+                    {
+                        switch (StatusString)
+                        {
+                            case "Processed":
+                                Status = ProcessingStatus.Processed;
+                                break;
+                            case "Outdated":
+                                Status = ProcessingStatus.Outdated;
+                                break;
+                            case "Unprocessed":
+                                Status = ProcessingStatus.Unprocessed;
+                                break;
+                            case "Skip":
+                                Status = ProcessingStatus.Skip;
+                                break;
+                        }
+                    }
+
+                    string AnglesInvertedString = Reader.GetAttribute("AreAnglesInverted", "");
+                    if (AnglesInvertedString != null && AnglesInvertedString.Length > 0)
+                        AreAnglesInverted = bool.Parse(AnglesInvertedString);
+                }
             }
         }
 

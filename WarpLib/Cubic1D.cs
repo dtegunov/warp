@@ -165,7 +165,7 @@ namespace Warp
             {
                 float Sum = 0;
                 int Samples = 0;
-                int Middle = n * (data.Length / (numnodes - 1));
+                int Middle = Math.Min(data.Length - 1, n * (data.Length / (numnodes - 1)));
                 int Start = Math.Max(0, Middle - Extent);
                 int Finish = Math.Min(data.Length, Middle + Extent);
 

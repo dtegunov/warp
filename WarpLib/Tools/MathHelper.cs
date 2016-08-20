@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Warp.Tools
 {
-    static class MathHelper
+    public static class MathHelper
     {
         public static float Mean(IEnumerable<float> data)
         {
@@ -33,6 +33,18 @@ namespace Warp.Tools
             }
 
             return (float)Math.Sqrt(data.Count() * Sum2 - Sum * Sum) / data.Count();
+        }
+
+        public static float2 MeanAndStd(IEnumerable<float> data)
+        {
+            double Sum = 0f, Sum2 = 0f;
+            foreach (var i in data)
+            {
+                Sum += i;
+                Sum2 += i * i;
+            }
+
+            return new float2((float)Sum / data.Count(), (float)Math.Sqrt(data.Count() * Sum2 - Sum * Sum) / data.Count());
         }
 
         public static float[] Normalize(float[] data)
@@ -198,6 +210,34 @@ namespace Warp.Tools
         public static float ResidualFraction(float value)
         {
             return value - (int)value;
+        }
+
+        public static float Median(IEnumerable<float> data)
+        {
+            List<float> Sorted = new List<float>(data);
+            Sorted.Sort();
+
+            return Sorted[Sorted.Count / 2];
+        }
+
+        public static float[] WithinNStd(float[] data, float nstd)
+        {
+            float Mean = MathHelper.Mean(data);
+            float Std = StdDev(data) * nstd;
+
+            List<float> Result = data.Where(t => Math.Abs(t - Mean) <= Std).ToList();
+
+            return Result.ToArray();
+        }
+
+        public static float[] WithinNStdFromMedian(float[] data, float nstd)
+        {
+            float Mean = Median(data);
+            float Std = StdDev(data) * nstd;
+
+            List<float> Result = data.Where(t => Math.Abs(t - Mean) <= Std).ToList();
+
+            return Result.ToArray();
         }
     }
 }

@@ -482,8 +482,27 @@ namespace Warp
 
                 unsafe
                 {
-                    MapHeader Header = MapHeader.ReadFromFile(AveragePath);
-                    float[] Data = IOHelper.ReadSmallMapFloat(AveragePath, new int2(1, 1), 0, typeof (float));
+                    MapHeader Header = null;
+                    float[] Data = null;
+                    int Attempts = 0;
+
+                    while (Attempts < 10)
+                    {
+                        try
+                        {
+                            Header = MapHeader.ReadFromFile(AveragePath);
+                            Data = IOHelper.ReadSmallMapFloat(AveragePath, new int2(1, 1), 0, typeof (float));
+                            break;
+                        }
+                        catch (Exception)
+                        {
+                            Header = new HeaderMRC();
+                            Header.Dimensions = new int3(1, 1, 1);
+                            Data = new float[1];
+
+                            Attempts++;
+                        }
+                    }
 
                     int Width = Header.Dimensions.X;
                     int Height = Header.Dimensions.Y;
@@ -507,7 +526,7 @@ namespace Warp
                             return BitmapSource.Create(Width, Height, 96, 96, PixelFormats.Indexed8, BitmapPalettes.Gray256, new byte[Data.Length], Width);
 
                         float Min = Mean - 2.0f * StdDev;
-                        float Range = 4.5f * StdDev;
+                        float Range = 3.5f * StdDev;
 
                         byte[] DataBytes = new byte[Data.Length];
                         fixed (byte* DataBytesPtr = DataBytes)
@@ -809,7 +828,7 @@ namespace Warp
             }
         }
 
-        public void ProcessCTF(MapHeader originalHeader, Image originalStack, bool doastigmatism, decimal scaleFactor)
+        public virtual void ProcessCTF(MapHeader originalHeader, Image originalStack, bool doastigmatism, decimal scaleFactor)
         {
             if (!Directory.Exists(PowerSpectrumDir))
                 Directory.CreateDirectory(PowerSpectrumDir);
@@ -1660,9 +1679,9 @@ namespace Warp
 
                         PositionsExtraction[i] = new float3(OriginX - ShiftX - dimbox / 2, OriginY - ShiftY - dimbox / 2, 0f);
                         PositionsGrid[i] = new float3((OriginX - ShiftX) / DimsImage.X, (OriginY - ShiftY) / DimsImage.Y, 0);
-                        ParticleAngles[i] = new float3(-float.Parse(ColumnAngleRot[nameIndex]) * Helper.ToRad,
-                                                       -float.Parse(ColumnAngleTilt[nameIndex]) * Helper.ToRad,
-                                                       -float.Parse(ColumnAnglePsi[nameIndex]) * Helper.ToRad);
+                        ParticleAngles[i] = new float3(float.Parse(ColumnAngleRot[nameIndex]) * Helper.ToRad,
+                                                       float.Parse(ColumnAngleTilt[nameIndex]) * Helper.ToRad,
+                                                       float.Parse(ColumnAnglePsi[nameIndex]) * Helper.ToRad);
                         i++;
                     }
                 }
@@ -2730,9 +2749,9 @@ namespace Warp
 
                             PositionsShift[z * RowIndices.Count + i] = GetShiftFromPyramid(PositionsGridPerFrame[z * RowIndices.Count + i]);
                         }
-                        ParticleAngles[i] = new float3(-float.Parse(ColumnAngleRot[nameIndex]) * Helper.ToRad,
-                                                       -float.Parse(ColumnAngleTilt[nameIndex]) * Helper.ToRad,
-                                                       -float.Parse(ColumnAnglePsi[nameIndex]) * Helper.ToRad);
+                        ParticleAngles[i] = new float3(float.Parse(ColumnAngleRot[nameIndex]) * Helper.ToRad,
+                                                       float.Parse(ColumnAngleTilt[nameIndex]) * Helper.ToRad,
+                                                       float.Parse(ColumnAnglePsi[nameIndex]) * Helper.ToRad);
 
                         i++;
                     }
@@ -4073,13 +4092,13 @@ namespace Warp
                 float3[] ParticleAngles1 = new float3[NParticles1];
                 float3[] ParticleAngles2 = new float3[NParticles2];
                 for (int p = 0; p < NParticles1; p++)
-                    ParticleAngles1[p] = new float3(-float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAngleRot")),
-                                                    -float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAngleTilt")),
-                                                    -float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAnglePsi")));
+                    ParticleAngles1[p] = new float3(float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAngleRot")),
+                                                    float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAngleTilt")),
+                                                    float.Parse(tableIn.GetRowValue(RowIndices1[p], "rlnAnglePsi")));
                 for (int p = 0; p < NParticles2; p++)
-                    ParticleAngles2[p] = new float3(-float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAngleRot")),
-                                                    -float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAngleTilt")),
-                                                    -float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAnglePsi")));
+                    ParticleAngles2[p] = new float3(float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAngleRot")),
+                                                    float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAngleTilt")),
+                                                    float.Parse(tableIn.GetRowValue(RowIndices2[p], "rlnAnglePsi")));
                 #endregion
 
                 #region Prepare masks

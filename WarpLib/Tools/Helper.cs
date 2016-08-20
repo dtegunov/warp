@@ -11,7 +11,7 @@ using Warp.Headers;
 
 namespace Warp.Tools
 {
-    static class Helper
+    public static class Helper
     {
         public static IFormatProvider NativeFormat = CultureInfo.InvariantCulture.NumberFormat;
         public static IFormatProvider NativeDateTimeFormat = CultureInfo.InvariantCulture.DateTimeFormat;

@@ -49,6 +49,8 @@ namespace Warp
                 Close();
             }
 
+            GPU.MemoryChanged += () => Options.UpdateGPUStats();
+
             DataContext = Options;
             Options.PropertyChanged += Options_PropertyChanged;
             Closing += MainWindow_Closing;
@@ -103,6 +105,57 @@ namespace Warp
                 for (int i = 0; i < Managed.Length; i++)
                     if (Math.Abs(Managed[i] - Native[i]) > 1e-6f)
                         throw new Exception();
+
+                Matrix3 A = new Matrix3(1, 2, 3, 4, 5, 6, 7, 8, 9);
+                Matrix3 B = new Matrix3(11, 12, 13, 14, 15, 16, 17, 18, 19);
+                Matrix3 C = A * B;
+
+                // Euler matrix
+                {
+                    Matrix3 E = Matrix3.Euler(0 * Helper.ToRad, 20 * Helper.ToRad, 0 * Helper.ToRad);
+                    float3 EE = Matrix3.EulerFromMatrix(E.Transposed()) * Helper.ToDeg;
+
+                    float3 Transformed = E * new float3(1, 0, 0);
+                    Transformed.Y = 0;
+                }
+
+                // Projector
+                /*{
+                    Image MapForProjector = StageDataLoad.LoadMap("E:\\youwei\\run36_half1_class001_unfil.mrc", new int2(1, 1), 0, typeof (float));
+                    Projector Proj = new Projector(MapForProjector, 2);
+                    Image Projected = Proj.Project(new int2(240, 240), new[] { new float3(0, 0, 0) }, 120);
+                    Projected = Projected.AsIFFT();
+                    Projected.RemapFromFT();
+                    Projected.WriteMRC("d_projected.mrc");
+                }*/
+
+                // Backprojector
+                /*{
+                    Image Dot = new Image(new int3(32, 32, 360));
+                    for (int a = 0; a < 360; a++)
+                        Dot.GetHost(Intent.Write)[a][0] = 1;
+                    Dot = Dot.AsFFT();
+                    Dot.AsAmplitudes().WriteMRC("d_dot.mrc");
+
+                    Image DotWeights = new Image(new int3(32, 32, 360), true);
+                    for (int a = 0; a < 360; a++)
+                        for (int i = 0; i < DotWeights.ElementsSliceReal; i++)
+                            DotWeights.GetHost(Intent.Write)[a][i] = 1;
+
+                    float3[] Angles = new float3[360];
+                    for (int a = 0; a < 360; a++)
+                        Angles[a] = new float3(0, a * Helper.ToRad * 0.05f, 0);
+
+                    Projector Proj = new Projector(new int3(32, 32, 32), 2);
+                    Proj.BackProject(Dot, DotWeights, Angles);
+
+                    Proj.Weights.WriteMRC("d_weights.mrc");
+                    //Image Re = Proj.Data.AsImaginary();
+                    //Re.WriteMRC("d_projdata.mrc");
+
+                    Image Rec = Proj.Reconstruct(true);
+                    Rec.WriteMRC("d_rec.mrc");
+                }*/
 
                 //Star Models = new Star("D:\\rado27\\Refine3D\\run1_ct5_it005_half1_model.star", "data_model_group_2");
                 //Debug.WriteLine(Models.GetRow(0)[0]);
@@ -696,11 +749,17 @@ namespace Warp
                                 Image OriginalStack = null;
                                 decimal ScaleFactor = 1M / (decimal)Math.Pow(2, (double)Options.PostBinTimes);
 
-                                //PrepareHeaderAndMap(movie.Path, ImageGain, ScaleFactor, out OriginalHeader, out OriginalStack);
+                                PrepareHeaderAndMap(movie.Path, ImageGain, ScaleFactor, out OriginalHeader, out OriginalStack);
 
-                                //OriginalStack.WriteMRC("d_stack.mrc");
-                                movie.UpdateStarDefocus(TableIn, ColumnNames, ColumnCoordsX, ColumnCoordsY);
-                                //movie.ExportParticles(TableIn, TableOut, OriginalHeader, OriginalStack, Options.ExportParticleSize, Options.ExportParticleRadius, ScaleFactor);
+                                if (movie.GetType() == typeof (Movie))
+                                {
+                                    movie.UpdateStarDefocus(TableIn, ColumnNames, ColumnCoordsX, ColumnCoordsY);
+                                    //movie.ExportParticles(TableIn, TableOut, OriginalHeader, OriginalStack, Options.ExportParticleSize, Options.ExportParticleRadius, ScaleFactor);
+                                }
+                                else if (movie.GetType() == typeof (TiltSeries))
+                                {
+                                    ((TiltSeries)movie).ExportSubtomos(TableIn, OriginalStack, Options.ExportParticleSize, new int3(959, 927, 300));
+                                }
 
                                 OriginalStack?.Dispose();
                                 //Debug.WriteLine(movie.Path);

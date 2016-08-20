@@ -186,7 +186,7 @@ __global__ void ScaleNormCorrSumKernel(half2* d_simcoords, half* d_sim, half* d_
 		float pixelsize = params.pixelsize + params.pixeldelta * __cosf(2.0f * (simcoords.y - params.pixelangle));
 		simcoords.x /= pixelsize;
 
-		float val = d_GetCTF<true>(simcoords.x, simcoords.y, params) * __half2float(d_scale[i]);
+		float val = d_GetCTF<true, false>(simcoords.x, simcoords.y, params) * __half2float(d_scale[i]);
 		d_sim[i] = __float2half(val);
 		sum1 += val;
 		sum2 += val * val;

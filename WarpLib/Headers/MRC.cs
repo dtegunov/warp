@@ -88,7 +88,7 @@ namespace Warp.Headers
             Mode = (MRCDataType)reader.ReadInt32();
             StartSubImage = new int3(reader.ReadBytes(3 * sizeof(int)));
             Griddimensions = new int3(reader.ReadBytes(3 * sizeof(int)));
-            Pixelsize = new float3(reader.ReadBytes(3 * sizeof(float)));
+            Pixelsize = new float3(reader.ReadBytes(3 * sizeof(float))) / new float3(Dimensions.X, Dimensions.Y, Dimensions.Z);
             Angles = new float3(reader.ReadBytes(3 * sizeof(float)));
             MapOrder = new int3(reader.ReadBytes(3 * sizeof(int)));
 
@@ -188,7 +188,7 @@ namespace Warp.Headers
             writer.Write((int)Mode);
             writer.Write(StartSubImage);
             writer.Write(Griddimensions);
-            writer.Write(Pixelsize);
+            writer.Write(Pixelsize * new float3(Dimensions.X, Dimensions.Y, Dimensions.Z));
             writer.Write(Angles);
             writer.Write(MapOrder);
 

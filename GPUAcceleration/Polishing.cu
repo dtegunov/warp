@@ -157,7 +157,7 @@ __global__ void PolishingGetDiffKernel(float2* d_phase, float2* d_average, float
 	{
 		float2 value = d_phase[id];
 		float2 average = d_average[id];
-		float ctf = d_GetCTF<false>(d_ctfcoords[id].x, d_ctfcoords[id].y, ctfparams);	// Already corrected for mag anisotropy.
+		float ctf = d_GetCTF<false, false>(d_ctfcoords[id].x, d_ctfcoords[id].y, ctfparams);	// Already corrected for mag anisotropy.
 		average *= ctf;
 
 		float2 shiftfactors = d_shiftfactors[id];

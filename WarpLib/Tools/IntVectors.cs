@@ -122,6 +122,16 @@ namespace Warp.Tools
         {
             return new int3((int)(o1.X / o2), (int)(o1.Y / o2), (int)(o1.Z / o2));
         }
+
+        public static int3 operator +(int3 o1, float o2)
+        {
+            return new int3((int)(o1.X + o2), (int)(o1.Y + o2), (int)(o1.Z + o2));
+        }
+
+        public static int3 operator -(int3 o1, float o2)
+        {
+            return new int3((int)(o1.X - o2), (int)(o1.Y - o2), (int)(o1.Z - o2));
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -214,6 +224,26 @@ namespace Warp.Tools
         public static int2 operator /(int2 o1, float o2)
         {
             return new int2((int)(o1.X / o2), (int)(o1.Y / o2));
+        }
+
+        public static int2 operator *(int2 o1, int2 o2)
+        {
+            return new int2((int)(o1.X * o2.X), (int)(o1.Y * o2.Y));
+        }
+
+        public static int2 operator /(int2 o1, int2 o2)
+        {
+            return new int2((int)(o1.X / o2.X), (int)(o1.Y / o2.Y));
+        }
+
+        public static int2 operator +(int2 o1, int2 o2)
+        {
+            return new int2((int)(o1.X + o2.X), (int)(o1.Y + o2.Y));
+        }
+
+        public static int2 operator -(int2 o1, int2 o2)
+        {
+            return new int2((int)(o1.X - o2.X), (int)(o1.Y - o2.Y));
         }
 
         public override string ToString()

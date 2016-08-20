@@ -6,6 +6,15 @@ namespace Warp
 {
     public static class GPU
     {
+        public static readonly object Sync = new object();
+
+        public static event Action MemoryChanged;
+
+        public static void OnMemoryChanged()
+        {
+            MemoryChanged?.Invoke();
+        }
+
         // Memory.cpp:
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "GetDeviceCount")]
@@ -432,6 +441,12 @@ namespace Warp
 
         [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ProjectForward")]
         public static extern void ProjectForward(IntPtr d_inputft, IntPtr d_outputft, int3 dimsinput, int2 dimsoutput, float[] h_angles, float supersample, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "ProjectBackward")]
+        public static extern void ProjectBackward(IntPtr d_volumeft, IntPtr d_volumeweights, int3 dimsvolume, IntPtr d_projft, IntPtr d_projweights, int2 dimsproj, int rmax, float[] h_angles, float supersample, uint batch);
+
+        [DllImport("GPUAcceleration.dll", CharSet = CharSet.Ansi, SetLastError = true, CallingConvention = CallingConvention.StdCall, EntryPoint = "Bandpass")]
+        public static extern void Bandpass(IntPtr d_input, IntPtr d_output, int3 dims, float nyquistlow, float nyquisthigh, uint batch);
     }
 
     public class DeviceToken
