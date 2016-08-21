@@ -233,5 +233,117 @@ namespace Warp.Tools
 
             return defaultValue;
         }
+
+        public static string LoadAttribute(XPathNavigator nav, string name, string defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return Value;
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static int LoadAttribute(XPathNavigator nav, string name, int defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return int.Parse(Value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static long LoadAttribute(XPathNavigator nav, string name, long defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return long.Parse(Value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static float LoadAttribute(XPathNavigator nav, string name, float defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return float.Parse(Value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static double LoadAttribute(XPathNavigator nav, string name, double defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return double.Parse(Value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static bool LoadAttribute(XPathNavigator nav, string name, bool defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return bool.Parse(Value);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
+
+        public static decimal LoadAttribute(XPathNavigator nav, string name, decimal defaultValue)
+        {
+            string Value = nav.GetAttribute(name, "");
+            if (string.IsNullOrEmpty(Value))
+                return defaultValue;
+
+            try
+            {
+                return decimal.Parse(Value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception)
+            { }
+
+            return defaultValue;
+        }
     }
 }

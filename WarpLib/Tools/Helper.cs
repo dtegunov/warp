@@ -290,5 +290,33 @@ namespace Warp.Tools
                 }
             }
         }
+
+        public static float[] Extract(float[] volume, int3 dimsvolume, int3 centerextract, int3 dimsextract)
+        {
+            int3 Origin = new int3(centerextract.X - dimsextract.X / 2,
+                                   centerextract.Y - dimsextract.Y / 2,
+                                   centerextract.Z - dimsextract.Z / 2);
+
+            float[] Extracted = new float[dimsextract.Elements()];
+
+            unsafe
+            {
+                fixed (float* volumePtr = volume)
+                fixed (float* ExtractedPtr = Extracted)
+                for (int z = 0; z < dimsextract.Z; z++)
+                    for (int y = 0; y < dimsextract.Y; y++)
+                        for (int x = 0; x < dimsextract.X; x++)
+                        {
+                            int3 Pos = new int3((Origin.X + x + dimsvolume.X) % dimsvolume.X,
+                                                (Origin.Y + y + dimsvolume.Y) % dimsvolume.Y,
+                                                (Origin.Z + z + dimsvolume.Z) % dimsvolume.Z);
+
+                            float Val = volumePtr[(Pos.Z * dimsvolume.Y + Pos.Y) * dimsvolume.X + Pos.X];
+                            ExtractedPtr[(z * dimsextract.Y + y) * dimsextract.X + x] = Val;
+                        }
+            }
+
+            return Extracted;
+        }
     }
 }
