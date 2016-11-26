@@ -14,12 +14,16 @@
     <ClInclude Include="Functions.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Angles.cpp" />
+    <ClCompile Include="Correlation.cpp" />
     <ClCompile Include="Post.cu" />
     <ClCompile Include="Projector.cpp" />
+    <ClCompile Include="WeightOptimization.cpp" />
     <CudaCompile Include="Comparison.cu" />
     <CudaCompile Include="ParticleCTF.cu" />
     <CudaCompile Include="ParticleShift.cu" />
     <CudaCompile Include="Polishing.cu" />
+    <CudaCompile Include="TomoRefine.cu" />
     <CudaCompile Include="Tools.cu" />
     <CudaCompile Include="CTF.cu" />
     <ClCompile Include="Cubic.cpp" />
@@ -99,6 +103,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <GPUDebugInfo>false</GPUDebugInfo>
       <HostDebugInfo>false</HostDebugInfo>
       <GenerateRelocatableDeviceCode>true</GenerateRelocatableDeviceCode>
+      <AdditionalOptions>--default-stream per-thread %(AdditionalOptions)</AdditionalOptions>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

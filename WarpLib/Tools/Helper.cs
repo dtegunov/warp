@@ -318,5 +318,15 @@ namespace Warp.Tools
 
             return Extracted;
         }
+
+        public static float3[] GetHealpixAngles(int order, string symmetry = "C1", float limittilt = -91)
+        {
+            int N = CPU.GetAnglesCount(order, symmetry, limittilt);
+
+            float[] Continuous = new float[N * 3];
+            CPU.GetAngles(Continuous, order, symmetry, limittilt);
+
+            return Helper.FromInterleaved3(Continuous);
+        }
     }
 }

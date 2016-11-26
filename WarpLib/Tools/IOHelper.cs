@@ -139,7 +139,7 @@ namespace Warp.Tools
 
                 unsafe
                 {
-                    int Elements = (int)Header.Dimensions.ElementsSlice();
+                    int Elements = (int)Header.Dimensions.Elements();
 
                     fixed (byte* BytesPtr = Bytes)
                     fixed (float* DataPtr = Data)

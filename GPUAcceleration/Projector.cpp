@@ -12,7 +12,7 @@ __declspec(dllexport) void __stdcall InitProjector(int3 dims, int oversampling, 
         vol.data[i] = h_data[i];
 
     relion::Projector projector(dims.x, TRILINEAR, oversampling, 10, 3);
-    projector.computeFourierTransformMap(vol, dummy, 2 * dims.x, 16, false, false, false);
+    projector.computeFourierTransformMap(vol, dummy, 2 * dims.x, 16, true, false, false);
 
     int3 projectordims = toInt3(XSIZE(projector.data), YSIZE(projector.data), ZSIZE(projector.data));
     for (uint i = 0; i < Elements(projectordims); i++)
@@ -54,4 +54,27 @@ __declspec(dllexport) void __stdcall BackprojectorReconstruct(int3 dimsori, int 
     {
         memcpy(h_reconstruction, vol.data, Elements(dimsori) * sizeof(float));
     }
+}
+
+__declspec(dllexport) void __stdcall BackprojectorReconstructGPU(int3 dimsori, int3 dimspadded, int oversampling, float2* d_dataft, float* d_weights, bool do_reconstruct_ctf, float* d_result, cufftHandle pre_planforw, cufftHandle pre_planback, cufftHandle pre_planforwctf)
+{
+    float* d_reconstructed;
+    cudaMalloc((void**)&d_reconstructed, ElementsFFT(dimsori) * sizeof(float2));
+
+    d_ReconstructGridding(d_dataft, d_weights, d_reconstructed, dimsori, dimspadded, oversampling, pre_planforw, pre_planback);
+
+    if (do_reconstruct_ctf)
+    {
+        if (pre_planforwctf > NULL)
+            d_FFTR2C(d_reconstructed, (float2*)d_reconstructed, &pre_planforwctf);
+        else
+            d_FFTR2C(d_reconstructed, (float2*)d_reconstructed, 3, dimsori);
+        d_Abs((float2*)d_reconstructed, d_result, ElementsFFT(dimsori));
+    }
+    else
+    {
+        cudaMemcpy(d_result, d_reconstructed, Elements(dimsori) * sizeof(float), cudaMemcpyDeviceToHost);
+    }
+
+    cudaFree(d_reconstructed);
 }

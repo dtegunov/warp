@@ -239,5 +239,19 @@ namespace Warp.Tools
 
             return Result.ToArray();
         }
+
+        public static int[] WithinNStdFromMedianIndices(float[] data, float nstd)
+        {
+            float Mean = Median(data);
+            float Std = StdDev(data) * nstd;
+
+            List<int> Result = new List<int>();
+
+            for (int i = 0; i < data.Length; i++)
+                if (Math.Abs(data[i] - Mean) <= Std)
+                    Result.Add(i);
+
+            return Result.ToArray();
+        }
     }
 }

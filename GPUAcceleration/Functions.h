@@ -28,6 +28,23 @@ extern "C" __declspec(dllexport) void CompareParticles(float* d_particles,
                                                         float* d_scores,
                                                         uint nparticles);
 
+// Correlation.cpp:
+
+extern "C" __declspec(dllexport) void CorrelateSubTomos(float2* d_projectordata,
+                                                        float projectoroversample,
+                                                        int3 dimsprojector,
+                                                        float2* d_experimentalft,
+                                                        float* d_ctf,
+                                                        int3 dimsvolume,
+                                                        uint nvolumes,
+                                                        float3* h_angles,
+                                                        uint nangles,
+                                                        float maskradius,
+                                                        float* d_bestcorrelation,
+                                                        float* d_bestrot,
+                                                        float* d_besttilt,
+                                                        float* d_bestpsi);
+
 // CTF.cpp:
 extern "C" __declspec(dllexport) void CreateSpectra(float* d_frame,
 													int2 dimsframe,
@@ -100,6 +117,10 @@ extern "C" __declspec(dllexport) void ParticleCTFCompareToSim(float2* d_ps,
                                                                 float* h_scores, 
                                                                 uint nframes,
                                                                 uint batch);
+
+// Angles.cpp:
+extern "C" __declspec(dllexport) int __stdcall GetAnglesCount(int healpixorder, char* c_symmetry, float limittilt);
+extern "C" __declspec(dllexport) void __stdcall GetAngles(float3* h_angles, int healpixorder, char* c_symmetry, float limittilt);
 
 // Cubic.cpp:
 
@@ -282,6 +303,47 @@ extern "C" __declspec(dllexport) void PolishingGetDiff(float2* d_phase,
 // Projector.cpp:
 extern "C" __declspec(dllexport) void InitProjector(int3 dims, int oversampling, float* data, float* datasize);
 extern "C" __declspec(dllexport) void BackprojectorReconstruct(int3 dimsori, int oversampling, float* h_data, float* h_weights, char* c_symmetry, bool do_reconstruct_ctf, float* h_reconstruction);
+extern "C" __declspec(dllexport) void BackprojectorReconstructGPU(int3 dimsori, int3 dimspadded, int oversampling, float2* d_dataft, float* d_weights, bool do_reconstruct_ctf, float* d_result, cufftHandle pre_planforw, cufftHandle pre_planback, cufftHandle pre_planforwctf);
+
+// TomoRefine.cu:
+extern "C" __declspec(dllexport) void TomoRefineGetDiff(float2* d_experimental,
+                                                        float2* d_reference,
+                                                        float2* d_shiftfactors,
+                                                        float* d_ctf,
+                                                        float* d_weights,
+                                                        int2 dims,
+                                                        float2* h_shifts,
+                                                        float* h_diff,
+                                                        uint nparticles);
+
+extern "C" __declspec(dllexport) void TomoRealspaceCorrelate(float* d_projections, 
+                                                            int2 dims, 
+                                                            uint nprojections, 
+                                                            uint ntilts, 
+                                                            float* d_experimental, 
+                                                            float* d_ctf, 
+                                                            float* d_mask, 
+                                                            float* d_weights, 
+                                                            float* h_shifts, 
+                                                            float* h_result);
+
+extern "C" __declspec(dllexport) void TomoGlobalAlign(float2* d_experimental,
+                                                        float2* d_shiftfactors,
+                                                        float* d_ctf,
+                                                        float* d_weights,
+                                                        int2 dims,
+                                                        float2* d_ref,
+                                                        int3 dimsref,
+                                                        int refsupersample,
+                                                        float3* h_angles,
+                                                        uint nangles,
+                                                        float2* h_shifts,
+                                                        uint nshifts,
+                                                        uint nparticles,
+                                                        uint ntilts,
+                                                        int* h_bestangles,
+                                                        int* h_bestshifts,
+                                                        float* h_bestscores);
 
 // Tools.cu:
 
@@ -312,6 +374,14 @@ extern "C" __declspec(dllexport) void Normalize(float* d_ps,
 												uint length,
 												uint batch);
 
+extern "C" __declspec(dllexport) void NormalizeMasked(float* d_ps, 
+                                                      float* d_output, 
+                                                      float* d_mask, 
+                                                      uint length, 
+                                                      uint batch);
+
+extern "C" __declspec(dllexport) void SphereMask(float* d_input, float* d_output, int3 dims, float radius, float sigma, uint batch);
+
 extern "C" __declspec(dllexport) void CreateCTF(float* d_output,
 												float2* d_coords,
 												uint length,
@@ -328,8 +398,14 @@ extern "C" __declspec(dllexport) void Resize(float* d_input,
 extern "C" __declspec(dllexport) void ShiftStack(float* d_input,
 												float* d_output,
 												int3 dims,
-												float3* h_shifts,
+												float* h_shifts,
 												uint batch);
+
+extern "C" __declspec(dllexport) void ShiftStackMassive(float* d_input,
+                                                        float* d_output,
+                                                        int3 dims,
+                                                        float* h_shifts,
+                                                        uint batch);
 
 extern "C" __declspec(dllexport) void FFT(float* d_input, float2* d_output, int3 dims, uint batch);
 
@@ -358,6 +434,8 @@ extern "C" __declspec(dllexport) void Cart2Polar(float* d_input, float* d_output
 extern "C" __declspec(dllexport) void Cart2PolarFFT(float* d_input, float* d_output, int2 dims, uint innerradius, uint exclusiveouterradius, uint batch);
 
 extern "C" __declspec(dllexport) void Xray(float* d_input, float* d_output, float ndevs, int2 dims, uint batch);
+
+extern "C" __declspec(dllexport) void Sum(float* d_input, float* d_output, uint length, uint batch);
 
 extern "C" __declspec(dllexport) void Abs(float* d_input, float* d_output, size_t length);
 
@@ -390,5 +468,30 @@ extern "C" __declspec(dllexport) void ProjectForward(float2* d_inputft, float2* 
 extern "C" __declspec(dllexport) void ProjectBackward(float2* d_volumeft, float* d_volumeweights, int3 dimsvolume, float2* d_projft, float* d_projweights, int2 dimsproj, int rmax, float3* h_angles, float supersample, uint batch);
 
 extern "C" __declspec(dllexport) void Bandpass(float* d_input, float* d_output, int3 dims, float nyquistlow, float nyquisthigh, uint batch);
+
+extern "C" __declspec(dllexport) void Rotate2D(float* d_input, float* d_output, int2 dims, float* h_angles, int oversample, uint batch);
+
+extern "C" __declspec(dllexport) void ShiftAndRotate2D(float* d_input, float* d_output, int2 dims, float2* h_shifts, float* h_angles, uint batch);
+
+extern "C" __declspec(dllexport) int CreateFFTPlan(int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) int CreateIFFTPlan(int3 dims, uint batch);
+
+extern "C" __declspec(dllexport) void DestroyFFTPlan(cufftHandle plan);
+
+
+// WeightOptimization.cpp:
+extern "C" __declspec(dllexport) void OptimizeWeights(int nrecs,
+                                                        float* h_recft, 
+                                                        float* h_recweights, 
+                                                        float* h_r2, 
+                                                        int elements, 
+                                                        int* h_subsets, 
+                                                        float* h_bfacs, 
+                                                        float* h_weightfactors, 
+                                                        float* h_recsum1, 
+                                                        float* h_recsum2, 
+                                                        float* h_weightsum1, 
+                                                        float* h_weightsum2);
 
 #endif

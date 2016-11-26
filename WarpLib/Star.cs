@@ -33,6 +33,8 @@ namespace Warp
 
                     if (Line == null)
                         break;
+                    if (Line.Length == 0)
+                        continue;
                     if (Line[0] != '_')
                         break;
 
@@ -57,6 +59,31 @@ namespace Warp
         {
             foreach (string name in columnNames)
                 NameMapping.Add(name, NameMapping.Count);
+        }
+
+        public Star(Star[] tables)
+        {
+            List<string> Common = new List<string>(tables[0].GetColumnNames());
+
+            foreach (var table in tables)
+                Common.RemoveAll(c => !table.HasColumn(c));
+
+            foreach (string name in Common)
+                NameMapping.Add(name, NameMapping.Count);
+
+            foreach (var table in tables)
+            {
+                int[] ColumnIndices = Common.Select(c => table.GetColumnID(c)).ToArray();
+
+                for (int r = 0; r < table.RowCount; r++)
+                {
+                    List<string> Row = new List<string>(Common.Count);
+                    for (int c = 0; c < ColumnIndices.Length; c++)
+                        Row.Add(table.GetRowValue(r, ColumnIndices[c]));
+
+                    AddRow(Row);
+                }
+            }
         }
 
         public void Save(string path)
@@ -96,6 +123,14 @@ namespace Warp
                 Rows[i][Index] = values[i];
         }
 
+        public int GetColumnID(string name)
+        {
+            if (NameMapping.ContainsKey(name))
+                return NameMapping[name];
+            else
+                return -1;
+        }
+
         public string GetRowValue(int row, string column)
         {
             if (!NameMapping.ContainsKey(column))
@@ -103,7 +138,12 @@ namespace Warp
             if (row < 0 || row >= Rows.Count)
                 throw new Exception("Row does not exist.");
 
-            return Rows[row][NameMapping[column]];
+            return GetRowValue(row, NameMapping[column]);
+        }
+
+        public string GetRowValue(int row, int column)
+        {
+            return Rows[row][column];
         }
 
         public void SetRowValue(int row, string column, string value)

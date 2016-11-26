@@ -10,7 +10,7 @@
              Focusable="True"
              MouseLeftButtonDown="UserControl_MouseDown">
     <Grid>
-        <TextBlock Name="ShowText" Text="{Binding ElementName=MainControl, Path=Text}" Foreground="{Binding ElementName=MainControl, Path=Foreground}" />
+        <TextBlock Name="ShowText" Text="{Binding ElementName=MainControl, Path=Text}" Foreground="{Binding ElementName=MainControl, Path=Foreground}" FontSize="12" />
         <TextBox Name="EditText" Text="{Binding ElementName=MainControl, Path=Text, Mode=TwoWay}" MinHeight="0" Height="{Binding ElementName=ShowText, Path=ActualHeight}" Padding="-6,-4,-6,-10" BorderThickness="0" Visibility="Collapsed" LostFocus="EditText_LostFocus" KeyDown="EditText_KeyDown" />
     </Grid>
 </UserControl>

@@ -419,7 +419,7 @@ namespace Warp
             }
         }
 
-        private float2[] GetSimulated1D()
+        protected float2[] GetSimulated1D()
         {
             if (PS1D == null || _SimulatedBackground == null)
                 return null;
@@ -558,7 +558,7 @@ namespace Warp
             }
         }
 
-        private float2[] GetCTFQuality()
+        protected float2[] GetCTFQuality()
         {
             // Calculate the correlation between experimental and simulated peaks.
             // If there is no single complete peak (i. e. <=1 zeros), just take the entire

@@ -70,7 +70,24 @@ namespace Warp
                                 (uint)projft.Dims.Z);
         }
 
-        public Image Reconstruct(bool isctf)
+        public Image Reconstruct(bool isctf, int planForw = -1, int planBack = -1, int planForwCTF = -1)
+        {
+            Image Reconstruction = new Image(IntPtr.Zero, Dims, isctf);
+            GPU.BackprojectorReconstructGPU(Dims,
+                                            DimsOversampled,
+                                            Oversampling,
+                                            Data.GetDevice(Intent.Read),
+                                            Weights.GetDevice(Intent.Read),
+                                            isctf,
+                                            Reconstruction.GetDevice(Intent.Write),
+                                            planForw,
+                                            planBack,
+                                            planForwCTF);
+
+            return Reconstruction;
+        }
+
+        public Image ReconstructCPU(bool isctf, string symmetry)
         {
             float[] ContinuousData = Data.GetHostContinuousCopy();
             float[] ContinuousWeights = Weights.GetHostContinuousCopy();
@@ -80,15 +97,33 @@ namespace Warp
             Data.FreeDevice();
             Weights.FreeDevice();
 
-            CPU.BackprojectorReconstruct(Dims, Oversampling, ContinuousData, ContinuousWeights, "C1", isctf, ContinuousResult);
+            CPU.BackprojectorReconstruct(Dims, Oversampling, ContinuousData, ContinuousWeights, symmetry, isctf, ContinuousResult);
 
-            return new Image(ContinuousResult, Dims, isctf);
+            Image Reconstruction = new Image(ContinuousResult, Dims, isctf);
+
+            return Reconstruction;
+        }
+
+        public void FreeDevice()
+        {
+            Data.FreeDevice();
+            Weights.FreeDevice();
         }
 
         public void Dispose()
         {
             Data.Dispose();
             Weights.Dispose();
+        }
+
+        public static void GetPlans(int3 dims, int oversampling, out int planForw, out int planBack, out int planForwCTF)
+        {
+            int Oversampled = dims.X * oversampling;
+            int3 DimsOversampled = new int3(Oversampled, Oversampled, Oversampled);
+
+            planForw = GPU.CreateFFTPlan(DimsOversampled, 1);
+            planBack = GPU.CreateIFFTPlan(DimsOversampled, 1);
+            planForwCTF = GPU.CreateFFTPlan(dims, 1);
         }
     }
 }

@@ -399,6 +399,39 @@ namespace Warp
             return Result;
         }
 
+        public Image AsSum3D()
+        {
+            if (IsComplex || IsHalf)
+                throw new Exception("Data type not supported.");
+
+            Image Result = new Image(IntPtr.Zero, new int3(1, 1, 1));
+            GPU.Sum(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), (uint)ElementsReal, 1);
+
+            return Result;
+        }
+
+        public Image AsSum2D()
+        {
+            if (IsComplex || IsHalf)
+                throw new Exception("Data type not supported.");
+
+            Image Result = new Image(IntPtr.Zero, new int3(Dims.Z, 1, 1));
+            GPU.Sum(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), (uint)ElementsSliceReal, (uint)Dims.Z);
+
+            return Result;
+        }
+
+        public Image AsSum1D()
+        {
+            if (IsComplex || IsHalf)
+                throw new Exception("Data type not supported.");
+
+            Image Result = new Image(IntPtr.Zero, new int3(Dims.Y * Dims.Z, 1, 1));
+            GPU.Sum(GetDevice(Intent.Read), Result.GetDevice(Intent.Write), (uint)ElementsLineReal, (uint)(Dims.Y * Dims.Z));
+
+            return Result;
+        }
+
         public Image AsRegion(int3 origin, int3 dimensions)
         {
             if (origin.X + dimensions.X >= Dims.X || 
@@ -644,19 +677,42 @@ namespace Warp
         {
             int3 Scaled = new int3(newSliceDims.X, newSliceDims.Y, Dims.Z);
             Image Output = new Image(Scaled);
-            IntPtr OutputDevice = Output.GetDevice(Intent.Write);
-
-            float[][] OriginalHost = GetHost(Intent.Read);
+            
             for (int z = 0; z < Dims.Z; z++)
             {
-                Image Slice = new Image(OriginalHost[z]);
-                GPU.Scale(Slice.GetDevice(Intent.Read),
-                          new IntPtr((long)OutputDevice + newSliceDims.Elements() * sizeof(float) * z),
-                          new int3(DimsSlice),
+                GPU.Scale(GetDeviceSlice(z, Intent.Read),
+                          Output.GetDeviceSlice(z, Intent.Write),
+                          Dims.Slice(),
                           new int3(newSliceDims), 
                           1);
-                Slice.Dispose();
             }
+
+            return Output;
+        }
+
+        public Image AsScaled(int2 newSliceDims)
+        {
+            int3 Scaled = new int3(newSliceDims.X, newSliceDims.Y, Dims.Z);
+            Image Output = new Image(IntPtr.Zero, Scaled);
+
+            GPU.Scale(GetDevice(Intent.Read),
+                      Output.GetDevice(Intent.Write),
+                      new int3(DimsSlice),
+                      new int3(newSliceDims),
+                      (uint)Dims.Z);
+
+            return Output;
+        }
+
+        public Image AsScaled(int3 newDims)
+        {
+            Image Output = new Image(IntPtr.Zero, newDims);
+
+            GPU.Scale(GetDevice(Intent.Read),
+                      Output.GetDevice(Intent.Write),
+                      new int3(Dims),
+                      new int3(newDims),
+                      1);
 
             return Output;
         }
@@ -775,7 +831,7 @@ namespace Warp
         {
             if (ElementsReal != elements * batch ||
                 summands.ElementsReal != elements ||
-                IsFT != summands.IsFT ||
+                //IsFT != summands.IsFT ||
                 IsComplex != summands.IsComplex)
                 throw new DimensionMismatchException();
 
@@ -871,7 +927,7 @@ namespace Warp
         {
             if (ElementsComplex != elements * batch ||
                 multiplicators.ElementsComplex != elements ||
-                IsFT != multiplicators.IsFT ||
+                //IsFT != multiplicators.IsFT ||
                 multiplicators.IsComplex)
                 throw new DimensionMismatchException();
 
@@ -928,7 +984,7 @@ namespace Warp
         {
             if (ElementsComplex != elements * batch ||
                 divisors.ElementsComplex != elements ||
-                IsFT != divisors.IsFT ||
+                //IsFT != divisors.IsFT ||
                 divisors.IsComplex)
                 throw new DimensionMismatchException();
 
@@ -991,12 +1047,12 @@ namespace Warp
                 GPU.OnMemoryChanged();
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
-            
+
             GPU.ShiftStack(Data,
-                            Data,
-                            DimsEffective.Slice(),
-                            Helper.ToInterleaved(shifts), 
-                            (uint)Dims.Z);
+                           Data,
+                           DimsEffective.Slice(),
+                           Helper.ToInterleaved(shifts),
+                           (uint)Dims.Z);
 
             if (IsHalf)
             {
@@ -1021,12 +1077,11 @@ namespace Warp
                 GPU.HalfToSingle(GetDevice(Intent.Read), Data, ElementsReal);
             }
 
-            for (int b = 0; b < Dims.Z; b++)
-                GPU.ShiftStack(new IntPtr((long)Data + ElementsSliceReal * b * sizeof(float)),
-                               new IntPtr((long)Data + ElementsSliceReal * b * sizeof(float)),
-                               DimsEffective.Slice(),
-                               new[] { shifts[b].X, shifts[b].Y, shifts[b].Z },
-                               1);
+            GPU.ShiftStackMassive(Data,
+                                  Data,
+                                  DimsEffective.Slice(),
+                                  Helper.ToInterleaved(shifts),
+                                  (uint)Dims.Z);
 
             if (IsHalf)
             {

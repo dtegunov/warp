@@ -33,6 +33,13 @@ namespace Warp.Tools
             Z = BitConverter.ToInt32(value, 2 * sizeof(float));
         }
 
+        public int3(float3 value)
+        {
+            X = (int)value.X;
+            Y = (int)value.Y;
+            Z = (int)value.Z;
+        }
+
         public long Elements()
         {
             return (long)X * (long)Y * (long)Z;
@@ -41,6 +48,11 @@ namespace Warp.Tools
         public long ElementsSlice()
         {
             return (long)X * (long)Y;
+        }
+
+        public long ElementsFFT()
+        {
+            return (long)(X / 2 + 1) * Y * Z;
         }
 
         public uint ElementFromPosition(int3 position)
@@ -61,6 +73,11 @@ namespace Warp.Tools
         public int3 Slice()
         {
             return new int3(X, Y, 1);
+        }
+
+        public float Length()
+        {
+            return (float)Math.Sqrt(X * X + Y * Y + Z * Z);
         }
 
         public static implicit operator byte[] (int3 value)
@@ -132,6 +149,16 @@ namespace Warp.Tools
         {
             return new int3((int)(o1.X - o2), (int)(o1.Y - o2), (int)(o1.Z - o2));
         }
+
+        public static int3 operator +(int3 o1, int3 o2)
+        {
+            return new int3((int)(o1.X + o2.X), (int)(o1.Y + o2.Y), (int)(o1.Z + o2.Z));
+        }
+
+        public static int3 operator -(int3 o1, int3 o2)
+        {
+            return new int3((int)(o1.X - o2.X), (int)(o1.Y - o2.Y), (int)(o1.Z - o2.Z));
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -157,9 +184,20 @@ namespace Warp.Tools
             Y = BitConverter.ToInt32(value, sizeof(float));
         }
 
+        public int2(float2 v)
+        {
+            X = (int)v.X;
+            Y = (int)v.Y;
+        }
+
         public long Elements()
         {
             return (long)X * (long)Y;
+        }
+
+        public long ElementsFFT()
+        {
+            return (long)(X / 2 + 1) * Y;
         }
 
         public uint ElementFromPosition(int2 position)
@@ -170,6 +208,11 @@ namespace Warp.Tools
         public long ElementFromPositionLong(int2 position)
         {
             return (long)position.Y * (long)X + (long)position.X;
+        }
+
+        public float Length()
+        {
+            return (float)Math.Sqrt(X * X + Y * Y);
         }
 
         public static implicit operator byte[] (int2 value)
@@ -214,6 +257,16 @@ namespace Warp.Tools
         public static int2 operator /(int2 o1, int o2)
         {
             return new int2(o1.X / o2, o1.Y / o2);
+        }
+
+        public static int2 operator +(int2 o1, int o2)
+        {
+            return new int2(o1.X + o2, o1.Y + o2);
+        }
+
+        public static int2 operator -(int2 o1, int o2)
+        {
+            return new int2(o1.X - o2, o1.Y - o2);
         }
 
         public static int2 operator *(int2 o1, float o2)

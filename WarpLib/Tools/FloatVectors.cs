@@ -39,6 +39,11 @@ namespace Warp.Tools
             return Bytes;
         }
 
+        public float Length()
+        {
+            return (float)Math.Sqrt(X * X + Y * Y + Z * Z + W * W);
+        }
+
         public override bool Equals(Object obj)
         {
             return obj is float4 && this == (float4)obj;
@@ -94,6 +99,11 @@ namespace Warp.Tools
             Array.Copy(BitConverter.GetBytes(value.Z), 0, Bytes, 2 * sizeof(int), sizeof(float));
 
             return Bytes;
+        }
+
+        public float Length()
+        {
+            return (float)Math.Sqrt(X * X + Y * Y + Z * Z);
         }
 
         public float3 Floor()
@@ -191,6 +201,11 @@ namespace Warp.Tools
             Array.Copy(BitConverter.GetBytes(value.Y), 0, Bytes, sizeof(int), sizeof(float));
 
             return Bytes;
+        }
+
+        public float Length()
+        {
+            return (float)Math.Sqrt(X * X + Y * Y);
         }
 
         public override bool Equals(Object obj)
